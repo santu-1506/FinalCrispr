@@ -235,7 +235,7 @@ def train_model():
             callbacks=[
                 keras.callbacks.EarlyStopping(
                     monitor='val_loss',
-                    patience=5,
+                    patience=2,
                     min_delta=1e-4,
                     restore_best_weights=True,
                     verbose=1

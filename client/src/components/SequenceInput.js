@@ -161,30 +161,6 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
             animate={{ opacity: 1, height: 'auto' }}
             className="border-t pt-4"
           >
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Sequence Analysis</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-gray-600 mb-1">Exact Matches</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {sequences.sgRNA.split('').filter((base, i) => base === sequences.DNA[i]).length}/23
-                </div>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-gray-600 mb-1">Similarity</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {Math.round((sequences.sgRNA.split('').filter((base, i) => base === sequences.DNA[i]).length / 23) * 100)}%
-                </div>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-gray-600 mb-1">PAM Compatible</div>
-                <div className={`text-lg font-semibold ${
-                  checkPAMSequence(sequences.sgRNA)?.isValid && checkPAMSequence(sequences.DNA)?.isValid
-                    ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {checkPAMSequence(sequences.sgRNA)?.isValid && checkPAMSequence(sequences.DNA)?.isValid ? 'Yes' : 'No'}
-                </div>
-              </div>
-            </div>
           </motion.div>
         )}
 

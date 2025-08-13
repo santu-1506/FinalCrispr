@@ -209,7 +209,7 @@ const Predict = () => {
           <span>CRISPR Prediction</span>
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Predict Gene Editing Success
+          CRISPR Gene editing Prediction Tool
         </h1>
         <p className="text-gray-600 max-w-2xl mx-auto">
           Input your guide RNA and target DNA sequences to predict CRISPR editing success rates
@@ -300,18 +300,6 @@ const Predict = () => {
             transition={{ delay: 0.3 }}
             className="bg-blue-50 rounded-xl p-6"
           >
-            <div className="flex items-start space-x-3">
-              <InformationCircleIcon className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-medium text-blue-900 mb-2">How it works</h3>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Input 23-nucleotide sequences (A, T, C, G)</li>
-                  <li>• AI analyzes sequence compatibility</li>
-                  <li>• PAM sequence validation</li>
-                  <li>• Confidence score provided</li>
-                </ul>
-              </div>
-            </div>
           </motion.div>
 
           {/* Processing Time */}
