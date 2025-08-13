@@ -5,6 +5,13 @@ Flask API to serve CRISPR gene editing success predictions
 """
 
 import os
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logging
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN custom operations
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -15,6 +22,9 @@ from flask_cors import CORS
 import pickle
 import logging
 from datetime import datetime
+
+# Suppress TensorFlow warnings
+tf.get_logger().setLevel('ERROR')
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +62,7 @@ class PatchEmbedding(layers.Layer):
 
 class ViTClassifier(keras.Model):
     """Vision Transformer Classifier for CRISPR prediction"""
-    def __init__(self, embed_dim=16, num_heads=2, num_layers=1, num_classes=2, **kwargs):
+    def __init__(self, embed_dim=8, num_heads=1, num_layers=1, num_classes=2, **kwargs):
         super().__init__(**kwargs)
         
         self.embed_dim = embed_dim
@@ -74,14 +84,14 @@ class ViTClassifier(keras.Model):
             trainable=True
         )
         
-        # Simplified transformer blocks
+        # Very simple transformer blocks
         self.transformer_blocks = [
             [
                 layers.LayerNormalization(),
                 layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim//num_heads),
                 layers.LayerNormalization(),
-                layers.Dense(embed_dim, activation="gelu"),  # Smaller feedforward
-                layers.Dropout(0.3),  # More dropout for regularization
+                layers.Dense(embed_dim, activation="gelu"),  # Keep same dimension for residual
+                layers.Dropout(0.5),  # Much more dropout for regularization
             ]
             for _ in range(num_layers)
         ]
@@ -240,10 +250,13 @@ def train_model():
         X = np.expand_dims(X, axis=-1).astype(np.float32)
         y = np.array(training_data['pam_label'].values).astype(np.int32)
         
-        # Create and compile model with much slower learning rate
+        # Create and compile model with extremely slow learning rate
         model = ViTClassifier()
         model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=0.0002),  # Much slower learning rate
+            optimizer=keras.optimizers.Adam(
+                learning_rate=0.0001,  # Extremely slow learning rate
+                weight_decay=0.01  # Add weight decay for regularization
+            ),
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
             metrics=['accuracy']
         )
@@ -254,10 +267,10 @@ def train_model():
         
         logger.info(f"Model parameters: {model.count_params():,}")
         
-        # Train the model with parameters for gradual learning (9-10 epochs)
+        # Train the model with parameters for very gradual learning (9-15 epochs)
         history = model.fit(
             X, y,
-            batch_size=64,  # Larger batch size for more stable gradients
+            batch_size=32,  # Smaller batch size for noisier gradients
             epochs=30,
             validation_split=0.2,
             callbacks=[

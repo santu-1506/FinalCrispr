@@ -5,6 +5,13 @@ This script demonstrates the complete workflow of training, saving, and loading 
 """
 
 import os
+import warnings
+
+# Suppress warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TensorFlow warnings
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN warnings
+warnings.filterwarnings('ignore', category=UserWarning)  # Suppress protobuf warnings
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -19,15 +26,23 @@ from model_api import ViTClassifier, PatchEmbedding, generate_match_matrix, chec
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_training_data():
-    """Load and prepare training data"""
+def load_training_data(sample_size=30000):
+    """Load and prepare training data with optional sampling for memory management"""
     try:
         # Load CRISPR sequence data
+        logger.info("Loading CRISPR sequence data...")
         df = pd.read_csv("I2.txt", sep=',', header=None)
         df.columns = ['sgRNA', 'DNA', 'label']
         
         # Keep only valid 23-base sequences
         df = df[(df['sgRNA'].str.len() == 23) & (df['DNA'].str.len() == 23)]
+        
+        # Use sampling for memory management if specified
+        if sample_size and sample_size < len(df):
+            logger.info(f"Sampling {sample_size} sequences from {len(df)} total sequences for memory efficiency")
+            df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+        
+        logger.info(f"Processing {len(df)} sequence pairs...")
         
         # Generate match matrices for each sequence pair
         df['match_matrix'] = df.apply(lambda row: generate_match_matrix(row['sgRNA'], row['DNA']), axis=1)
@@ -36,7 +51,7 @@ def load_training_data():
         pam_labels = [check_pam_sequence(row['sgRNA'], row['DNA']) for _, row in df.iterrows()]
         df['pam_label'] = pam_labels
         
-        logger.info(f"Loaded {len(df)} sequence pairs for training")
+        logger.info(f"Successfully loaded {len(df)} sequence pairs for training")
         return df
         
     except Exception as e:
@@ -65,11 +80,11 @@ def train_model(training_data):
         
         logger.info(f"Model parameters: {model.count_params():,}")
         
-        # Train the model
+        # Train the model with enhanced parameters for big dataset
         history = model.fit(
             X, y,
-            batch_size=32,
-            epochs=30,
+            batch_size=128,  # Larger batch size for stable training
+            epochs=50,  # More epochs for convergence
             validation_split=0.2,
             callbacks=[
                 keras.callbacks.EarlyStopping(
@@ -153,9 +168,10 @@ def predict_with_model(model, sgRNA, DNA):
         logger.error(f"Prediction failed: {str(e)}")
         return None
 
-def main():
-    """Main training and saving workflow"""
+def main(sample_size=30000):
+    """Main training and saving workflow with optional data sampling"""
     logger.info("Starting CRISPR Model Training and Saving Workflow")
+    logger.info(f"Using sample size: {sample_size} sequences")
     
     # Step 1: Check if model already exists
     if model_exists():
@@ -177,7 +193,7 @@ def main():
     
     # Step 2: Load training data
     logger.info("Loading training data...")
-    training_data = load_training_data()
+    training_data = load_training_data(sample_size=sample_size)
     if training_data is None:
         logger.error("Failed to load training data")
         return None
