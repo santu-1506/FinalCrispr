@@ -29,8 +29,8 @@ training_data = None
 
 class PatchEmbedding(layers.Layer):
     """Patch embedding layer for Vision Transformer"""
-    def __init__(self, embed_dim):
-        super().__init__()
+    def __init__(self, embed_dim, **kwargs):
+        super().__init__(**kwargs)
         self.embed_dim = embed_dim
         self.projection = layers.Dense(embed_dim)
         
@@ -38,11 +38,22 @@ class PatchEmbedding(layers.Layer):
         batch_size = tf.shape(x)[0]
         patches = tf.reshape(x, [batch_size, 23*23, 1])
         return self.projection(patches)
+    
+    def get_config(self):
+        """Return the config of the layer."""
+        config = super().get_config()
+        config.update({'embed_dim': self.embed_dim})
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        """Create a layer from its config."""
+        return cls(**config)
 
 class ViTClassifier(keras.Model):
     """Vision Transformer Classifier for CRISPR prediction"""
-    def __init__(self, embed_dim=64, num_heads=4, num_layers=3, num_classes=2):
-        super().__init__()
+    def __init__(self, embed_dim=16, num_heads=2, num_layers=1, num_classes=2, **kwargs):
+        super().__init__(**kwargs)
         
         self.embed_dim = embed_dim
         self.num_patches = 23 * 23
@@ -63,14 +74,14 @@ class ViTClassifier(keras.Model):
             trainable=True
         )
         
-        # Transformer blocks
+        # Simplified transformer blocks
         self.transformer_blocks = [
             [
                 layers.LayerNormalization(),
                 layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim//num_heads),
                 layers.LayerNormalization(),
-                layers.Dense(embed_dim * 2, activation="gelu"),
-                layers.Dense(embed_dim),
+                layers.Dense(embed_dim, activation="gelu"),  # Smaller feedforward
+                layers.Dropout(0.3),  # More dropout for regularization
             ]
             for _ in range(num_layers)
         ]
@@ -91,19 +102,36 @@ class ViTClassifier(keras.Model):
         # Add positional embedding
         patches += self.pos_embedding
         
-        # Transformer blocks
-        for ln1, mha, ln2, dense1, dense2 in self.transformer_blocks:
+        # Simplified transformer blocks
+        for ln1, mha, ln2, dense, dropout in self.transformer_blocks:
             normed = ln1(patches)
             attended = mha(normed, normed, training=training)
             patches = patches + attended
             
             normed = ln2(patches)
-            fed_forward = dense2(dense1(normed))
+            fed_forward = dense(normed)
+            fed_forward = dropout(fed_forward, training=training)
             patches = patches + fed_forward
         
         # Classification
         representation = self.norm(patches[:, 0])
         return self.classifier(representation)
+    
+    def get_config(self):
+        """Return the config of the layer."""
+        config = super().get_config()
+        config.update({
+            'embed_dim': self.embed_dim,
+            'num_heads': 4,  # Default value
+            'num_layers': 3,  # Default value
+            'num_classes': 2  # Default value
+        })
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        """Create a layer from its config."""
+        return cls(**config)
 
 def generate_match_matrix(sgRNA, DNA):
     """Create binary matrix showing base matches between sequences"""
@@ -212,10 +240,10 @@ def train_model():
         X = np.expand_dims(X, axis=-1).astype(np.float32)
         y = np.array(training_data['pam_label'].values).astype(np.int32)
         
-        # Create and compile model
+        # Create and compile model with much slower learning rate
         model = ViTClassifier()
         model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            optimizer=keras.optimizers.Adam(learning_rate=0.0002),  # Much slower learning rate
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
             metrics=['accuracy']
         )
@@ -226,25 +254,25 @@ def train_model():
         
         logger.info(f"Model parameters: {model.count_params():,}")
         
-        # Train the model
+        # Train the model with parameters for gradual learning (9-10 epochs)
         history = model.fit(
             X, y,
-            batch_size=32,
+            batch_size=64,  # Larger batch size for more stable gradients
             epochs=30,
             validation_split=0.2,
             callbacks=[
                 keras.callbacks.EarlyStopping(
-                    monitor='val_loss',
-                    patience=2,
-                    min_delta=1e-4,
+                    monitor='val_accuracy',  # Monitor accuracy instead of loss
+                    patience=12,  # Even more patience to allow gradual learning
+                    min_delta=0.01,  # Require 1% improvement
                     restore_best_weights=True,
                     verbose=1
                 ),
                 keras.callbacks.ReduceLROnPlateau(
-                    monitor='val_loss',
-                    factor=0.5,
-                    patience=3,
-                    min_delta=1e-4,
+                    monitor='val_accuracy',
+                    factor=0.8,  # Even less aggressive LR reduction
+                    patience=6,  # More patience before reducing LR
+                    min_delta=0.005,  # 0.5% improvement required
                     verbose=1
                 )
             ],

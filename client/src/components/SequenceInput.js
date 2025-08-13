@@ -82,10 +82,6 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
                 {renderSequence(sequences.sgRNA)}
               </div>
               <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">GC Content: </span>
-                  <span className="font-medium">{calculateGCContent(sequences.sgRNA)}%</span>
-                </div>
                 {sequences.sgRNA.length >= 3 && (
                   <div>
                     <span className="text-gray-600">PAM: </span>
@@ -135,10 +131,6 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
                 {renderSequence(sequences.DNA)}
               </div>
               <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">GC Content: </span>
-                  <span className="font-medium">{calculateGCContent(sequences.DNA)}%</span>
-                </div>
                 {sequences.DNA.length >= 3 && (
                   <div>
                     <span className="text-gray-600">PAM: </span>

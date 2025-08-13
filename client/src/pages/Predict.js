@@ -309,15 +309,6 @@ const Predict = () => {
               animate={{ opacity: 1, x: 0 }}
               className="bg-green-50 rounded-xl p-6"
             >
-              <div className="flex items-start space-x-3">
-                <ClockIcon className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="font-medium text-green-900 mb-2">Performance</h3>
-                  <div className="text-sm text-green-800">
-                    Processing time: {prediction.metrics?.processingTime}ms
-                  </div>
-                </div>
-              </div>
             </motion.div>
           )}
         </div>
