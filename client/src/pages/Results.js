@@ -54,19 +54,12 @@ const Results = () => {
       const userPredictions = getUserPredictions();
       const stats = getUserStats();
       
-      // Debug logging
-      console.log('Current user:', user);
-      console.log('User predictions:', userPredictions);
-      console.log('User stats:', stats);
-      
-      setPredictions(userPredictions);
-      setUserStats(stats);
-      
-      if (userPredictions.length === 0) {
-        toast.info('No predictions yet. Start by making your first prediction!');
-      } else {
-        console.log(`Loaded ${userPredictions.length} predictions for user ${user.email}`);
-      }
+             setPredictions(userPredictions);
+       setUserStats(stats);
+       
+       if (userPredictions.length === 0) {
+         toast.info('No predictions yet. Start by making your first prediction!');
+       }
     } catch (error) {
       console.error('Error loading user data:', error);
       toast.error('Failed to load your results');
@@ -125,25 +118,25 @@ const Results = () => {
     }
   };
 
-  const getPredictionInfo = (prediction) => {
-    if (prediction === 1) {
-      return {
-        name: 'Success',
-        color: 'green',
-        bgColor: 'bg-green-50',
-        textColor: 'text-green-700',
-        borderColor: 'border-green-200'
-      };
-    } else {
-      return {
-        name: 'No Edit',
-        color: 'red',
-        bgColor: 'bg-red-50',
-        textColor: 'text-red-700',
-        borderColor: 'border-red-200'
-      };
-    }
-  };
+     const getPredictionInfo = (prediction) => {
+     if (prediction === 1) {
+       return {
+         name: 'Success',
+         color: 'green',
+         bgColor: 'bg-green-900/30',
+         textColor: 'text-green-400',
+         borderColor: 'border-green-500'
+       };
+     } else {
+       return {
+         name: 'No Edit',
+         color: 'red',
+         bgColor: 'bg-red-900/30',
+         textColor: 'text-red-400',
+         borderColor: 'border-red-500'
+       };
+     }
+   };
 
   const exportResults = () => {
     try {
@@ -259,33 +252,33 @@ const Results = () => {
           {/* Search */}
           <div className="relative flex-1 max-w-md">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search sequences..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+                         <input
+               type="text"
+               placeholder="Search sequences..."
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+               className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+             />
           </div>
 
           <div className="flex space-x-4">
             {/* Prediction Filter */}
-            <select
-              value={filterPrediction}
-              onChange={(e) => setFilterPrediction(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Predictions</option>
-              <option value="success">Success Only</option>
-              <option value="no_edit">No Edit Only</option>
-            </select>
+                         <select
+               value={filterPrediction}
+               onChange={(e) => setFilterPrediction(e.target.value)}
+               className="px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+             >
+               <option value="all">All Predictions</option>
+               <option value="success">Success Only</option>
+               <option value="no_edit">No Edit Only</option>
+             </select>
 
-            {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
+             {/* Sort */}
+             <select
+               value={sortBy}
+               onChange={(e) => setSortBy(e.target.value)}
+               className="px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
               <option value="confidence_high">High Confidence</option>
@@ -303,8 +296,8 @@ const Results = () => {
           </div>
         </div>
 
-        {/* Filtered Stats */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
+                 {/* Filtered Stats */}
+         <div className="mt-4 pt-4 border-t border-gray-600">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-gray-300">Filtered Results: </span>

@@ -60,12 +60,22 @@ export const savePredictionResult = (result) => {
 // Get user-specific prediction results
 export const getUserPredictions = () => {
   const user = getCurrentUser();
-  if (!user) return [];
+  if (!user) {
+    console.log('No user found when getting predictions');
+    return [];
+  }
   
   try {
     const storageKey = getUserStorageKey('predictions');
     const results = localStorage.getItem(storageKey);
-    return results ? JSON.parse(results) : [];
+    const parsed = results ? JSON.parse(results) : [];
+    
+    console.log('Getting predictions for user:', user.email);
+    console.log('Storage key for retrieval:', storageKey);
+    console.log('Raw localStorage data:', results);
+    console.log('Parsed predictions count:', parsed.length);
+    
+    return parsed;
   } catch (error) {
     console.error('Failed to get user predictions:', error);
     return [];

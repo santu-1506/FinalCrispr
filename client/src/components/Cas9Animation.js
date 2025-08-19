@@ -60,13 +60,13 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
   };
 
   return (
-    <div className="w-full h-96 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-8 relative overflow-hidden">
+    <div className="w-full h-96 bg-gradient-to-br from-gray-800 via-gray-700 to-gray-600 rounded-xl p-8 relative overflow-hidden">
       {/* Background particles */}
       <div className="absolute inset-0">
         {[...Array(20)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-1 h-1 bg-blue-200 rounded-full"
+            className="absolute w-1 h-1 bg-blue-400 rounded-full"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
@@ -91,10 +91,10 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
-          <h3 className="text-xl font-bold text-gray-800 mb-2">
+          <h3 className="text-xl font-bold text-white mb-2">
             {pamCompatible ? 'CRISPR Cas9 Gene Editing' : 'Gene Editing Failed'}
           </h3>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-300">
             {pamCompatible 
               ? 'PAM sequence compatible - Cas9 can cut the DNA'
               : 'PAM sequence incompatible - Cas9 cannot cut the DNA'
@@ -123,13 +123,13 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                   <div className="relative">
                     {/* DNA visualization */}
                     <div className="flex items-center space-x-1">
-                      <div className="text-xs font-mono bg-white p-2 rounded border-2 border-blue-200 shadow-sm">
-                        <div className="text-blue-600 mb-1">sgRNA: {sgRNA.slice(0, 8)}...</div>
-                        <div className="text-green-600">DNA:   {DNA.slice(0, 8)}...</div>
+                      <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-2 rounded shadow-sm">
+                        <div className="text-blue-400 mb-1">sgRNA: {sgRNA.slice(0, 8)}...</div>
+                        <div className="text-green-400">DNA:   {DNA.slice(0, 8)}...</div>
                       </div>
                       <ArrowRightIcon className="w-4 h-4 text-gray-400" />
-                      <div className="text-xs font-mono bg-white p-2 rounded border-2 border-purple-200 shadow-sm">
-                        PAM: ...{DNA.slice(-3)}
+                      <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-2 rounded shadow-sm">
+                        <span className="text-purple-400">PAM: ...{DNA.slice(-3)}</span>
                       </div>
                     </div>
                     
@@ -165,7 +165,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                       <BeakerIcon className="w-8 h-8 text-white" />
                     </motion.div>
                     <motion.div 
-                      className="absolute -top-2 -right-2 text-xs bg-white px-2 py-1 rounded-full shadow-sm border"
+                      className="absolute -top-2 -right-2 text-xs bg-gray-800 text-white border border-gray-600 px-2 py-1 rounded-full shadow-sm"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: animationStage === 'binding' ? 1 : 0 }}
                     >
@@ -182,7 +182,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                       animate={{ scale: 1, opacity: 1 }}
                       className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
                     >
-                      <div className="flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-full">
+                      <div className="flex items-center space-x-2 bg-green-900/30 text-green-400 border border-green-500 px-4 py-2 rounded-full">
                         <CheckCircleIcon className="w-5 h-5" />
                         <span className="text-sm font-medium">Successful Cut!</span>
                       </div>
@@ -200,8 +200,8 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                         (['recognition', 'cutting', 'success'].includes(animationStage) && stage === 'binding') ||
                         (['cutting', 'success'].includes(animationStage) && stage === 'recognition') ||
                         (['success'].includes(animationStage) && stage === 'cutting')
-                          ? 'text-green-600' 
-                          : 'text-gray-400'
+                          ? 'text-green-400' 
+                          : 'text-gray-500'
                       }`}
                       animate={{
                         opacity: animationStage === stage ? [0.5, 1, 0.5] : 1
@@ -216,8 +216,8 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                         (['recognition', 'cutting', 'success'].includes(animationStage) && stage === 'binding') ||
                         (['cutting', 'success'].includes(animationStage) && stage === 'recognition') ||
                         (['success'].includes(animationStage) && stage === 'cutting')
-                          ? 'bg-green-500' 
-                          : 'bg-gray-300'
+                          ? 'bg-green-400' 
+                          : 'bg-gray-600'
                       }`} />
                       <span className="capitalize">{stage}</span>
                     </motion.div>
@@ -244,10 +244,10 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                       <BeakerIcon className="w-8 h-8 text-white" />
                     </div>
                     <div className="text-2xl text-gray-400">×</div>
-                    <div className="text-xs font-mono bg-white p-3 rounded border-2 border-red-200 shadow-sm">
-                      <div className="text-blue-600 mb-1">sgRNA: {sgRNA.slice(0, 8)}...</div>
-                      <div className="text-green-600 mb-1">DNA:   {DNA.slice(0, 8)}...</div>
-                      <div className="text-red-600">PAM: ...{DNA.slice(-3)} ❌</div>
+                    <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-3 rounded shadow-sm">
+                      <div className="text-blue-400 mb-1">sgRNA: {sgRNA.slice(0, 8)}...</div>
+                      <div className="text-green-400 mb-1">DNA:   {DNA.slice(0, 8)}...</div>
+                      <div className="text-red-400">PAM: ...{DNA.slice(-3)} ❌</div>
                     </div>
                   </div>
                 </motion.div>
@@ -256,7 +256,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 1 }}
-                  className="flex items-center space-x-2 bg-red-100 text-red-800 px-4 py-2 rounded-full"
+                  className="flex items-center space-x-2 bg-red-900/30 text-red-400 border border-red-500 px-4 py-2 rounded-full"
                 >
                   <XCircleIcon className="w-5 h-5" />
                   <span className="text-sm font-medium">Cannot Cut - PAM Mismatch</span>
@@ -266,7 +266,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1.5 }}
-                  className="text-xs text-gray-500 text-center mt-4 max-w-xs"
+                  className="text-xs text-gray-400 text-center mt-4 max-w-xs"
                 >
                   CRISPR Cas9 requires a compatible PAM sequence (NGG) for successful cutting. 
                   The current sequence does not meet this requirement.
