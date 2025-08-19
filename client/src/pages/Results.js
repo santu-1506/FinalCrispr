@@ -7,37 +7,69 @@ import {
   CalendarIcon,
   FunnelIcon,
   ArrowDownTrayIcon,
-  EyeIcon
+  EyeIcon,
+  TrashIcon,
+  UserIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { 
+  getCurrentUser, 
+  getUserPredictions, 
+  getUserStats, 
+  deletePrediction,
+  exportUserData
+} from '../utils/userStorage';
 
 const Results = () => {
   const [predictions, setPredictions] = useState([]);
   const [filteredPredictions, setFilteredPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterPrediction, setFilterPrediction] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
+  const [userStats, setUserStats] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    fetchPredictions();
+    loadUserData();
   }, []);
 
   useEffect(() => {
     filterAndSortPredictions();
-  }, [predictions, searchTerm, filterCategory, sortBy]);
+  }, [predictions, searchTerm, filterPrediction, sortBy]);
 
-  const fetchPredictions = async () => {
+  const loadUserData = () => {
+    setLoading(true);
     try {
-      const response = await axios.get('/api/predictions/recent?limit=50');
-      setPredictions(response.data.data || []);
+      const user = getCurrentUser();
+      if (!user) {
+        toast.error('Please log in to view your results');
+        setLoading(false);
+        return;
+      }
+
+      setCurrentUser(user);
+      const userPredictions = getUserPredictions();
+      const stats = getUserStats();
+      
+      // Debug logging
+      console.log('Current user:', user);
+      console.log('User predictions:', userPredictions);
+      console.log('User stats:', stats);
+      
+      setPredictions(userPredictions);
+      setUserStats(stats);
+      
+      if (userPredictions.length === 0) {
+        toast.info('No predictions yet. Start by making your first prediction!');
+      } else {
+        console.log(`Loaded ${userPredictions.length} predictions for user ${user.email}`);
+      }
     } catch (error) {
-      console.error('Error fetching predictions:', error);
-      // Use sample data if API is not available
-      setPredictions(generateSampleData());
-      toast.error('Using sample data - API not available');
+      console.error('Error loading user data:', error);
+      toast.error('Failed to load your results');
     } finally {
       setLoading(false);
     }
@@ -49,23 +81,27 @@ const Results = () => {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(prediction => 
-        prediction.sgRNA.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        prediction.DNA.toLowerCase().includes(searchTerm.toLowerCase())
+        prediction.sgRNA?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        prediction.DNA?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Category filter
-    if (filterCategory !== 'all') {
-      filtered = filtered.filter(prediction => prediction.category === filterCategory);
+    // Prediction filter
+    if (filterPrediction !== 'all') {
+      if (filterPrediction === 'success') {
+        filtered = filtered.filter(prediction => prediction.prediction === 1);
+      } else if (filterPrediction === 'no_edit') {
+        filtered = filtered.filter(prediction => prediction.prediction === 0);
+      }
     }
 
     // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(b.createdAt) - new Date(a.createdAt);
+          return new Date(b.timestamp) - new Date(a.timestamp);
         case 'oldest':
-          return new Date(a.createdAt) - new Date(b.createdAt);
+          return new Date(a.timestamp) - new Date(b.timestamp);
         case 'confidence_high':
           return b.confidence - a.confidence;
         case 'confidence_low':
@@ -78,96 +114,80 @@ const Results = () => {
     setFilteredPredictions(filtered);
   };
 
-  const generateSampleData = () => {
-    const categories = [
-      'correct_predicted_correct',
-      'correct_predicted_wrong', 
-      'wrong_predicted_correct',
-      'wrong_predicted_wrong'
-    ];
-
-    const sampleSequences = [
-      { sgRNA: 'ATCGATCGATCGATCGATCAGG', DNA: 'ATCGATCGATCGATCGATCAGG' },
-      { sgRNA: 'GTCACCTCCAATGACTAGGGAGG', DNA: 'GTCTCCTCCACTGGATTGTGAGG' },
-      { sgRNA: 'CGTACGTACGTACGTACGTACGG', DNA: 'CGTACGTACGTACGTACGTCTGG' },
-      { sgRNA: 'TACGTATCGATCGATCGATCAGG', DNA: 'TACGTATCGATCGATCGATCTGG' }
-    ];
-
-    return Array.from({ length: 20 }, (_, i) => {
-      const seqPair = sampleSequences[i % sampleSequences.length];
-      const category = categories[i % categories.length];
-      return {
-        _id: `sample_${i}`,
-        sgRNA: seqPair.sgRNA,
-        DNA: seqPair.DNA,
-        actualLabel: Math.random() > 0.5 ? 1 : 0,
-        predictedLabel: Math.random() > 0.5 ? 1 : 0,
-        confidence: Math.random() * 0.4 + 0.5, // 50-90%
-        category,
-        inputType: i % 5 === 0 ? 'image' : 'text',
-        pamMatch: Math.random() > 0.3,
-        totalMatches: Math.floor(Math.random() * 200) + 100,
-        processingTime: Math.floor(Math.random() * 200) + 100,
-        createdAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString()
-      };
-    });
+  const handleDeletePrediction = (predictionId) => {
+    if (window.confirm('Are you sure you want to delete this prediction?')) {
+      if (deletePrediction(predictionId)) {
+        toast.success('Prediction deleted successfully');
+        loadUserData(); // Reload data
+      } else {
+        toast.error('Failed to delete prediction');
+      }
+    }
   };
 
-  const getCategoryInfo = (category) => {
-    const categoryMap = {
-      'correct_predicted_correct': {
-        name: 'True Positive',
+  const getPredictionInfo = (prediction) => {
+    if (prediction === 1) {
+      return {
+        name: 'Success',
         color: 'green',
         bgColor: 'bg-green-50',
         textColor: 'text-green-700',
         borderColor: 'border-green-200'
-      },
-      'correct_predicted_wrong': {
-        name: 'False Negative', 
-        color: 'yellow',
-        bgColor: 'bg-yellow-50',
-        textColor: 'text-yellow-700',
-        borderColor: 'border-yellow-200'
-      },
-      'wrong_predicted_correct': {
-        name: 'False Positive',
+      };
+    } else {
+      return {
+        name: 'No Edit',
         color: 'red',
         bgColor: 'bg-red-50',
         textColor: 'text-red-700',
         borderColor: 'border-red-200'
-      },
-      'wrong_predicted_wrong': {
-        name: 'True Negative',
-        color: 'gray',
-        bgColor: 'bg-gray-50',
-        textColor: 'text-gray-700',
-        borderColor: 'border-gray-200'
-      }
-    };
-    return categoryMap[category] || categoryMap['wrong_predicted_wrong'];
+      };
+    }
   };
 
   const exportResults = () => {
-    const csvContent = [
-      'ID,sgRNA,DNA,Actual,Predicted,Confidence,Category,PAM Match,Processing Time,Created At',
-      ...filteredPredictions.map(p => 
-        `${p._id},${p.sgRNA},${p.DNA},${p.actualLabel},${p.predictedLabel},${Math.round(p.confidence * 100)}%,${p.category},${p.pamMatch},${p.processingTime}ms,${p.createdAt}`
-      )
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `crispr_predictions_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    try {
+      const userData = exportUserData();
+      const jsonContent = JSON.stringify(userData, null, 2);
+      
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `crispr_user_data_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Data exported successfully!');
+    } catch (error) {
+      toast.error('Failed to export data');
+    }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="loading-spinner"></div>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="text-center py-12">
+        <UserIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-white mb-2">Authentication Required</h3>
+        <p className="text-gray-300 mb-4">Please log in to view your prediction results.</p>
+        <Link
+          to="/auth"
+          className="inline-flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          <span>Sign In</span>
+        </Link>
       </div>
     );
   }
@@ -180,16 +200,52 @@ const Results = () => {
         animate={{ opacity: 1, y: 0 }}
         className="text-center"
       >
-        <div className="inline-flex items-center space-x-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+        <div className="inline-flex items-center space-x-2 bg-blue-900/20 text-blue-400 px-4 py-2 rounded-full text-sm font-medium mb-4">
           <DocumentTextIcon className="w-4 h-4" />
-          <span>Prediction Results</span>
+          <span>Your Prediction Results</span>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Recent Predictions
+        <h1 className="text-3xl font-bold text-white mb-2">
+          Welcome back, {currentUser.name}!
         </h1>
-        <p className="text-gray-600 max-w-2xl mx-auto">
-          Browse and analyze all CRISPR gene editing predictions made using the system.
+        <p className="text-gray-300 max-w-2xl mx-auto">
+          Your personal CRISPR prediction history and analysis dashboard.
         </p>
+      </motion.div>
+
+      {/* User Stats */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="grid grid-cols-1 md:grid-cols-4 gap-6"
+      >
+        {[
+          { label: 'Total Predictions', value: userStats.totalPredictions || 0, icon: ChartBarIcon, color: 'blue' },
+          { label: 'Success Rate', value: `${userStats.successRate || 0}%`, icon: DocumentTextIcon, color: 'green' },
+          { label: 'Avg Confidence', value: `${userStats.averageConfidence || 0}%`, icon: ChartBarIcon, color: 'purple' },
+          { label: 'Recent Activity', value: userStats.recentActivity || 0, icon: CalendarIcon, color: 'orange' }
+        ].map((stat, index) => {
+          const Icon = stat.icon;
+          return (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.1 }}
+              className="bg-gray-800 rounded-xl shadow-lg p-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-300">{stat.label}</p>
+                  <p className="text-2xl font-bold text-white">{stat.value}</p>
+                </div>
+                <div className={`w-12 h-12 bg-${stat.color}-100 rounded-lg flex items-center justify-center`}>
+                  <Icon className={`w-6 h-6 text-${stat.color}-600`} />
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
       </motion.div>
 
       {/* Controls */}
@@ -197,7 +253,7 @@ const Results = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-white rounded-xl shadow-card p-6"
+        className="bg-gray-800 rounded-xl shadow-card p-6"
       >
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
           {/* Search */}
@@ -213,17 +269,15 @@ const Results = () => {
           </div>
 
           <div className="flex space-x-4">
-            {/* Category Filter */}
+            {/* Prediction Filter */}
             <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
+              value={filterPrediction}
+              onChange={(e) => setFilterPrediction(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="all">All Categories</option>
-              <option value="correct_predicted_correct">True Positive</option>
-              <option value="correct_predicted_wrong">False Negative</option>
-              <option value="wrong_predicted_correct">False Positive</option>
-              <option value="wrong_predicted_wrong">True Negative</option>
+              <option value="all">All Predictions</option>
+              <option value="success">Success Only</option>
+              <option value="no_edit">No Edit Only</option>
             </select>
 
             {/* Sort */}
@@ -249,32 +303,32 @@ const Results = () => {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Filtered Stats */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
-              <span className="text-gray-600">Total Results: </span>
+              <span className="text-gray-300">Filtered Results: </span>
               <span className="font-semibold">{filteredPredictions.length}</span>
             </div>
             <div>
-              <span className="text-gray-600">Avg Confidence: </span>
+              <span className="text-gray-300">Avg Confidence: </span>
               <span className="font-semibold">
                 {filteredPredictions.length > 0 
-                  ? Math.round(filteredPredictions.reduce((sum, p) => sum + p.confidence, 0) / filteredPredictions.length * 100) 
+                  ? Math.round(filteredPredictions.reduce((sum, p) => sum + (p.confidence || 0), 0) / filteredPredictions.length * 100) 
                   : 0}%
               </span>
             </div>
             <div>
-              <span className="text-gray-600">PAM Matches: </span>
+              <span className="text-gray-300">PAM Matches: </span>
               <span className="font-semibold">
-                {filteredPredictions.filter(p => p.pamMatch).length}
+                {filteredPredictions.filter(p => p.pam_match).length}
               </span>
             </div>
             <div>
-              <span className="text-gray-600">Success Rate: </span>
+              <span className="text-gray-300">Success Rate: </span>
               <span className="font-semibold">
                 {filteredPredictions.length > 0 
-                  ? Math.round(filteredPredictions.filter(p => p.predictedLabel === 1).length / filteredPredictions.length * 100)
+                  ? Math.round(filteredPredictions.filter(p => p.prediction === 1).length / filteredPredictions.length * 100)
                   : 0}%
               </span>
             </div>
@@ -291,36 +345,44 @@ const Results = () => {
       >
         {filteredPredictions.length > 0 ? (
           filteredPredictions.map((prediction, index) => {
-            const categoryInfo = getCategoryInfo(prediction.category);
+            const predictionInfo = getPredictionInfo(prediction.prediction);
             return (
               <motion.div
-                key={prediction._id}
+                key={prediction.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className={`bg-white rounded-lg shadow-card border-l-4 ${categoryInfo.borderColor} p-6 hover:shadow-lg transition-shadow`}
+                className={`bg-gray-800 rounded-lg shadow-card border-l-4 ${predictionInfo.borderColor} p-6 hover:shadow-lg transition-shadow`}
               >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`px-2 py-1 rounded text-xs font-medium ${categoryInfo.bgColor} ${categoryInfo.textColor}`}>
-                    {categoryInfo.name}
+                  <div className={`px-2 py-1 rounded text-xs font-medium ${predictionInfo.bgColor} ${predictionInfo.textColor}`}>
+                    {predictionInfo.name}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {format(new Date(prediction.createdAt), 'MMM dd, yyyy')}
+                  <div className="flex items-center space-x-2">
+                    <div className="text-xs text-gray-400">
+                      {format(new Date(prediction.timestamp), 'MMM dd, yyyy')}
+                    </div>
+                    <button
+                      onClick={() => handleDeletePrediction(prediction.id)}
+                      className="text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
                 {/* Sequences */}
                 <div className="space-y-3 mb-4">
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">Guide RNA</div>
-                    <div className="font-mono text-xs bg-gray-50 p-2 rounded break-all">
+                    <div className="text-xs text-gray-400 mb-1">Guide RNA</div>
+                    <div className="font-mono text-xs bg-gray-700 text-white p-2 rounded break-all">
                       {prediction.sgRNA}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">Target DNA</div>
-                    <div className="font-mono text-xs bg-gray-50 p-2 rounded break-all">
+                    <div className="text-xs text-gray-400 mb-1">Target DNA</div>
+                    <div className="font-mono text-xs bg-gray-700 text-white p-2 rounded break-all">
                       {prediction.DNA}
                     </div>
                   </div>
@@ -329,39 +391,41 @@ const Results = () => {
                 {/* Prediction Details */}
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Prediction:</span>
-                    <span className={`font-medium ${prediction.predictedLabel === 1 ? 'text-green-600' : 'text-red-600'}`}>
-                      {prediction.predictedLabel === 1 ? 'Success' : 'No Edit'}
+                    <span className="text-gray-300">Prediction:</span>
+                    <span className={`font-medium ${prediction.prediction === 1 ? 'text-green-600' : 'text-red-600'}`}>
+                      {prediction.prediction === 1 ? 'Success' : 'No Edit'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Confidence:</span>
-                    <span className="font-medium">{Math.round(prediction.confidence * 100)}%</span>
+                    <span className="text-gray-300">Confidence:</span>
+                    <span className="font-medium">{Math.round((prediction.confidence || 0) * 100)}%</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">PAM Match:</span>
-                    <span className={`font-medium ${prediction.pamMatch ? 'text-green-600' : 'text-red-600'}`}>
-                      {prediction.pamMatch ? 'Yes' : 'No'}
+                    <span className="text-gray-300">PAM Match:</span>
+                    <span className={`font-medium ${prediction.pam_match ? 'text-green-600' : 'text-red-600'}`}>
+                      {prediction.pam_match ? 'Yes' : 'No'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Processing:</span>
-                    <span className="font-medium">{prediction.processingTime}ms</span>
+                    <span className="text-gray-300">Source:</span>
+                    <span className="font-medium text-xs">{prediction.prediction_source || 'Model'}</span>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                  <div className="text-xs text-gray-500">
-                    Input: {prediction.inputType}
+                <div className="flex justify-between items-center pt-3 border-t border-gray-600">
+                  <div className="text-xs text-gray-400">
+                    Total Matches: {prediction.total_matches || 0}
                   </div>
-                  <Link
-                    to={`/predict?id=${prediction._id}`}
-                    className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    <EyeIcon className="w-4 h-4" />
-                    <span>View Details</span>
-                  </Link>
+                  <div className="flex items-center space-x-2">
+                    <Link
+                      to={`/predict`}
+                      className="flex items-center space-x-1 text-blue-400 hover:text-blue-300 text-sm"
+                    >
+                      <EyeIcon className="w-4 h-4" />
+                      <span>Predict</span>
+                    </Link>
+                  </div>
                 </div>
               </motion.div>
             );
@@ -369,9 +433,9 @@ const Results = () => {
         ) : (
           <div className="col-span-full text-center py-12">
             <DocumentTextIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No results found</h3>
-            <p className="text-gray-600 mb-4">
-              {searchTerm || filterCategory !== 'all' 
+            <h3 className="text-lg font-medium text-white mb-2">No results found</h3>
+            <p className="text-gray-300 mb-4">
+              {searchTerm || filterPrediction !== 'all' 
                 ? 'Try adjusting your search or filter criteria.'
                 : 'No predictions have been made yet.'
               }

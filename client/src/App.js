@@ -5,9 +5,11 @@ import { motion } from 'framer-motion';
 
 // Components
 import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Predict from './pages/Predict';
 import Results from './pages/Results';
+import Auth from './pages/Auth';
 
 // Styles
 import './App.css';
@@ -27,7 +29,7 @@ const pageTransition = {
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="min-h-screen bg-[#111827] text-white">
         <Navbar />
         
         <motion.main
@@ -39,9 +41,26 @@ function App() {
           className="container mx-auto px-4 py-8"
         >
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/predict" element={<Predict />} />
-            <Route path="/results" element={<Results />} />
+            {/* Public routes */}
+            <Route path="/login" element={<Auth />} />
+            <Route path="/auth" element={<Auth />} />
+            
+            {/* Protected routes */}
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            } />
+            <Route path="/predict" element={
+              <ProtectedRoute>
+                <Predict />
+              </ProtectedRoute>
+            } />
+            <Route path="/results" element={
+              <ProtectedRoute>
+                <Results />
+              </ProtectedRoute>
+            } />
           </Routes>
         </motion.main>
         

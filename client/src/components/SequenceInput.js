@@ -44,13 +44,13 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-card p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Sequence Input</h2>
+    <div className="bg-gray-800 rounded-xl shadow-card p-6">
+      <h2 className="text-lg font-semibold text-white mb-4">Sequence Input</h2>
       
       <div className="space-y-6">
         {/* sgRNA Input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             Guide RNA (sgRNA) - 23 nucleotides
           </label>
           <div className="relative">
@@ -59,12 +59,12 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               value={sequences.sgRNA}
               onChange={(e) => handleSequenceChange('sgRNA', e.target.value)}
               placeholder="Enter sgRNA sequence (A, T, C, G only)"
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
-                validationErrors.sgRNA ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm bg-gray-700 text-white placeholder-gray-400 ${
+                validationErrors.sgRNA ? 'border-red-500' : 'border-gray-600'
               }`}
               maxLength={23}
             />
-            <div className="absolute right-3 top-2 text-xs text-gray-500">
+            <div className="absolute right-3 top-2 text-xs text-gray-400">
               {sequences.sgRNA.length}/23
             </div>
           </div>
@@ -84,7 +84,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
                 {sequences.sgRNA.length >= 3 && (
                   <div>
-                    <span className="text-gray-600">PAM: </span>
+                    <span className="text-gray-300">PAM: </span>
                     <span className={`font-mono font-medium ${
                       checkPAMSequence(sequences.sgRNA)?.isValid ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -99,7 +99,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
 
         {/* DNA Input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             Target DNA - 23 nucleotides
           </label>
           <div className="relative">
@@ -108,12 +108,12 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               value={sequences.DNA}
               onChange={(e) => handleSequenceChange('DNA', e.target.value)}
               placeholder="Enter target DNA sequence (A, T, C, G only)"
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
-                validationErrors.DNA ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm bg-gray-700 text-white placeholder-gray-400 ${
+                validationErrors.DNA ? 'border-red-500' : 'border-gray-600'
               }`}
               maxLength={23}
             />
-            <div className="absolute right-3 top-2 text-xs text-gray-500">
+            <div className="absolute right-3 top-2 text-xs text-gray-400">
               {sequences.DNA.length}/23
             </div>
           </div>
@@ -133,7 +133,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
                 {sequences.DNA.length >= 3 && (
                   <div>
-                    <span className="text-gray-600">PAM: </span>
+                    <span className="text-gray-300">PAM: </span>
                     <span className={`font-mono font-medium ${
                       checkPAMSequence(sequences.DNA)?.isValid ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -151,7 +151,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="border-t pt-4"
+            className="border-t border-gray-600 pt-4"
           >
           </motion.div>
         )}

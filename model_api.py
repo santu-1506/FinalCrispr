@@ -60,80 +60,53 @@ class PatchEmbedding(layers.Layer):
         """Create a layer from its config."""
         return cls(**config)
 
-class ViTClassifier(keras.Model):
-    """Vision Transformer Classifier for CRISPR prediction"""
-    def __init__(self, embed_dim=8, num_heads=1, num_layers=1, num_classes=2, **kwargs):
+class SimpleCNNClassifier(keras.Model):
+    """Simple CNN Classifier for CRISPR prediction - memory efficient"""
+    def __init__(self, num_classes=2, **kwargs):
         super().__init__(**kwargs)
         
-        self.embed_dim = embed_dim
-        self.num_patches = 23 * 23
+        # Simple CNN layers
+        self.conv1 = layers.Conv2D(8, (3, 3), activation='relu', padding='same')
+        self.pool1 = layers.MaxPooling2D((2, 2))
+        self.dropout1 = layers.Dropout(0.3)
         
-        self.patch_embedding = PatchEmbedding(embed_dim)
+        self.conv2 = layers.Conv2D(16, (3, 3), activation='relu', padding='same')
+        self.pool2 = layers.MaxPooling2D((2, 2))
+        self.dropout2 = layers.Dropout(0.4)
         
-        # Learnable positional embeddings
-        self.pos_embedding = self.add_weight(
-            shape=(1, self.num_patches + 1, embed_dim),
-            initializer="random_normal",
-            trainable=True
-        )
+        self.conv3 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')
+        self.pool3 = layers.MaxPooling2D((2, 2))
+        self.dropout3 = layers.Dropout(0.5)
         
-        # Class token
-        self.class_token = self.add_weight(
-            shape=(1, 1, embed_dim),
-            initializer="random_normal",
-            trainable=True
-        )
-        
-        # Very simple transformer blocks
-        self.transformer_blocks = [
-            [
-                layers.LayerNormalization(),
-                layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim//num_heads),
-                layers.LayerNormalization(),
-                layers.Dense(embed_dim, activation="gelu"),  # Keep same dimension for residual
-                layers.Dropout(0.5),  # Much more dropout for regularization
-            ]
-            for _ in range(num_layers)
-        ]
-        
-        self.norm = layers.LayerNormalization()
+        # Global average pooling instead of flatten to reduce parameters
+        self.global_pool = layers.GlobalAveragePooling2D()
+        self.dense1 = layers.Dense(16, activation='relu')
+        self.dropout4 = layers.Dropout(0.6)
         self.classifier = layers.Dense(num_classes)
         
     def call(self, x, training=None):
-        batch_size = tf.shape(x)[0]
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = self.dropout1(x, training=training)
         
-        # Patch embedding
-        patches = self.patch_embedding(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = self.dropout2(x, training=training)
         
-        # Add class token
-        class_tokens = tf.broadcast_to(self.class_token, [batch_size, 1, self.embed_dim])
-        patches = tf.concat([class_tokens, patches], axis=1)
+        x = self.conv3(x)
+        x = self.pool3(x)
+        x = self.dropout3(x, training=training)
         
-        # Add positional embedding
-        patches += self.pos_embedding
+        x = self.global_pool(x)
+        x = self.dense1(x)
+        x = self.dropout4(x, training=training)
         
-        # Simplified transformer blocks
-        for ln1, mha, ln2, dense, dropout in self.transformer_blocks:
-            normed = ln1(patches)
-            attended = mha(normed, normed, training=training)
-            patches = patches + attended
-            
-            normed = ln2(patches)
-            fed_forward = dense(normed)
-            fed_forward = dropout(fed_forward, training=training)
-            patches = patches + fed_forward
-        
-        # Classification
-        representation = self.norm(patches[:, 0])
-        return self.classifier(representation)
+        return self.classifier(x)
     
     def get_config(self):
         """Return the config of the layer."""
         config = super().get_config()
         config.update({
-            'embed_dim': self.embed_dim,
-            'num_heads': 4,  # Default value
-            'num_layers': 3,  # Default value
             'num_classes': 2  # Default value
         })
         return config
@@ -251,7 +224,7 @@ def train_model():
         y = np.array(training_data['pam_label'].values).astype(np.int32)
         
         # Create and compile model with extremely slow learning rate
-        model = ViTClassifier()
+        model = SimpleCNNClassifier()
         model.compile(
             optimizer=keras.optimizers.Adam(
                 learning_rate=0.0001,  # Extremely slow learning rate
@@ -270,7 +243,7 @@ def train_model():
         # Train the model with parameters for very gradual learning (9-15 epochs)
         history = model.fit(
             X, y,
-            batch_size=32,  # Smaller batch size for noisier gradients
+            batch_size=16,  # Even smaller batch size to prevent OOM
             epochs=30,
             validation_split=0.2,
             callbacks=[
@@ -323,7 +296,7 @@ def load_model():
         if os.path.exists('crispr_model.h5'):
             # Load the entire model
             model = tf.keras.models.load_model('crispr_model.h5', custom_objects={
-                'ViTClassifier': ViTClassifier,
+                'SimpleCNNClassifier': SimpleCNNClassifier,
                 'PatchEmbedding': PatchEmbedding
             })
             logger.info("Pre-trained model loaded successfully from crispr_model.h5")

@@ -24,7 +24,7 @@ const PredictionResult = ({ prediction }) => {
   const confidence = predictionData.confidence;
 
   return (
-    <div className="bg-white rounded-xl shadow-card p-6">
+    <div className="bg-gray-800 rounded-xl shadow-card p-6">
       <div className="flex items-center space-x-3 mb-6">
         <div className={`w-10 h-10 rounded-lg bg-gradient-to-r ${
           isSuccess ? 'from-green-500 to-emerald-500' : 'from-red-500 to-pink-500'
@@ -32,7 +32,7 @@ const PredictionResult = ({ prediction }) => {
           <BeakerIcon className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Prediction Result</h2>
+          <h2 className="text-xl font-bold text-white">Prediction Result</h2>
           <p className="text-gray-600">CRISPR gene editing success analysis</p>
         </div>
       </div>
@@ -78,7 +78,7 @@ const PredictionResult = ({ prediction }) => {
 
       {/* Sequences */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Input Sequences</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Input Sequences</h3>
         <div className="space-y-4">
           <div>
             <div className="text-sm text-gray-600 mb-2">Guide RNA (sgRNA)</div>
