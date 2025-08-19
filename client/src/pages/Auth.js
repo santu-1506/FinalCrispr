@@ -15,6 +15,10 @@ import {
 import { toast } from 'react-hot-toast';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
+import axios from 'axios';
+
+// API base URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(false); // Default to signup page as per image
@@ -29,93 +33,151 @@ const Auth = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Check for saved credentials on component mount
-  useEffect(() => {
-    const savedEmail = localStorage.getItem('savedEmail');
-    const savedPassword = localStorage.getItem('savedPassword');
-    const shouldRemember = localStorage.getItem('rememberMe') === 'true';
-    
-    if (shouldRemember && savedEmail && savedPassword) {
-      setFormData(prev => ({ ...prev, email: savedEmail, password: savedPassword }));
-      setRememberMe(true);
-      setIsLogin(true);
-      
-      // Auto-login after a short delay
-      setTimeout(() => {
-        handleAutoLogin(savedEmail, savedPassword);
-      }, 500);
-    }
-  }, []);
-  
   const navigate = useNavigate();
   const location = useLocation();
 
-  // --- Hardcoded Credentials ---
-  const VALID_EMAIL = 'kmit@example.com';
-  const VALID_PASSWORD = 'kmit';
+  // Check for existing authentication on mount
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    const user = localStorage.getItem('userData');
+    
+    if (token && user) {
+      try {
+        const userData = JSON.parse(user);
+        // Verify token is still valid by checking expiration
+        const tokenPayload = jwtDecode(token);
+        if (tokenPayload.exp * 1000 > Date.now()) {
+          // User is already authenticated, redirect
+          const from = location.state?.from?.pathname || '/';
+          navigate(from, { replace: true });
+        } else {
+          // Token expired, clear storage
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userData');
+        }
+      } catch (error) {
+        // Invalid token/user data, clear storage
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+      }
+    }
+  }, [navigate, location]);
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAutoLogin = async (email, password) => {
-    if (email === VALID_EMAIL && password === VALID_PASSWORD) {
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userEmail', email);
-      localStorage.setItem('userName', 'KMIT User');
-      toast.success('Welcome back! Auto-logged in.');
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+  // API call for login
+  const handleLogin = async (email, password) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+        email,
+        password,
+        rememberMe
+      });
+
+      if (response.data.success) {
+        const { user, token, refreshToken } = response.data.data;
+        
+        // Store authentication data
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('userData', JSON.stringify(user));
+        localStorage.setItem('isAuthenticated', 'true');
+        
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken);
+        }
+
+        // Check if email is verified
+        if (!user.isEmailVerified) {
+          toast.success('Login successful! Please check your email to verify your account.');
+          // You can redirect to a verification page or show verification UI
+        } else {
+          toast.success(`Welcome back, ${user.fullName}!`);
+        }
+
+        const from = location.state?.from?.pathname || '/';
+        navigate(from, { replace: true });
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      if (error.response?.data?.code === 'ACCOUNT_LOCKED') {
+        toast.error('Account temporarily locked due to too many failed attempts. Please try again later.');
+      } else if (error.response?.data?.code === 'INVALID_CREDENTIALS') {
+        toast.error('Invalid email or password. Please try again.');
+      } else {
+        toast.error(error.response?.data?.message || 'Login failed. Please try again.');
+      }
+    }
+  };
+
+  // API call for signup
+  const handleSignup = async (fullName, email, password, confirmPassword) => {
+    try {
+      // Client-side validation
+      if (!fullName || !email || !password) {
+        toast.error('Please fill in all fields.');
+        return;
+      }
+      
+      if (password !== confirmPassword) {
+        toast.error('Passwords do not match.');
+        return;
+      }
+
+      if (password.length < 6) {
+        toast.error('Password must be at least 6 characters long.');
+        return;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
+        fullName,
+        email,
+        password,
+        confirmPassword
+      });
+
+      if (response.data.success) {
+        toast.success('Account created successfully! Please check your email to verify your account.', {
+          duration: 6000
+        });
+        
+        // Switch to login mode and pre-fill email
+        setIsLogin(true);
+        setFormData(prev => ({ ...prev, email, password: '', confirmPassword: '', fullName: '' }));
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      
+      if (error.response?.data?.code === 'USER_EXISTS') {
+        toast.error('An account with this email already exists. Please sign in instead.');
+        setIsLogin(true);
+        setFormData(prev => ({ ...prev, email, password: '', confirmPassword: '', fullName: '' }));
+      } else if (error.response?.data?.errors) {
+        // Handle validation errors
+        const firstError = error.response.data.errors[0];
+        toast.error(firstError.message);
+      } else {
+        toast.error(error.response?.data?.message || 'Account creation failed. Please try again.');
+      }
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));   
 
     try {
       if (isLogin) {
-        if (formData.email === VALID_EMAIL && formData.password === VALID_PASSWORD) {
-          // Save credentials if Remember Me is checked
-          if (rememberMe) {
-            localStorage.setItem('savedEmail', formData.email);
-            localStorage.setItem('savedPassword', formData.password);
-            localStorage.setItem('rememberMe', 'true');
-          } else {
-            localStorage.removeItem('savedEmail');
-            localStorage.removeItem('savedPassword');
-            localStorage.removeItem('rememberMe');
-          }
-          
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('userEmail', formData.email);
-          localStorage.setItem('userName', 'KMIT User');
-          toast.success('Login Successful! Welcome back.');
-          const from = location.state?.from?.pathname || '/';
-          navigate(from, { replace: true });
-        } else {
-          toast.error('Invalid credentials. Please try again.');
-        }
+        await handleLogin(formData.email, formData.password);
       } else {
-        if (!formData.fullName || !formData.email || !formData.password) {
-          toast.error('Please fill in all fields.');
-          return;
-        }
-        if (formData.password !== formData.confirmPassword) {
-          toast.error('Passwords do not match.');
-          return;
-        }
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userEmail', formData.email);
-        localStorage.setItem('userName', formData.fullName);
-        toast.success('Account created! Welcome to CRISPR Predict.');
-        const from = location.state?.from?.pathname || '/';
-        navigate(from, { replace: true });
+        await handleSignup(formData.fullName, formData.email, formData.password, formData.confirmPassword);
       }
     } catch (error) {
-      toast.error('Authentication failed. Please try again.');
+      console.error('Form submission error:', error);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }

@@ -39,6 +39,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crispr_pr
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Routes
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/predictions', require('./routes/predictions'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/sequences', require('./routes/sequences'));

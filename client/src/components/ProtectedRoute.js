@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
+import { jwtDecode } from 'jwt-decode';
 
 const ProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null); // null = checking, true/false = determined
@@ -9,17 +10,57 @@ const ProtectedRoute = ({ children }) => {
   const location = useLocation();
 
   useEffect(() => {
-    // Check authentication status
+    // Check authentication status with JWT validation
     const checkAuth = () => {
-      const authStatus = localStorage.getItem('isAuthenticated') === 'true';
-      setIsAuthenticated(authStatus);
-      setIsLoading(false);
+      try {
+        const token = localStorage.getItem('authToken');
+        const userData = localStorage.getItem('userData');
+        
+        console.log('ProtectedRoute: Checking auth...', { hasToken: !!token, hasUserData: !!userData });
+        
+        if (!token || !userData) {
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          console.log('ProtectedRoute: No token or userData found');
+          return;
+        }
+
+        // Verify token is still valid
+        const decodedToken = jwtDecode(token);
+        const currentTime = Date.now() / 1000;
+        
+        if (decodedToken.exp < currentTime) {
+          // Token expired, clean up
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userData');
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('refreshToken');
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          console.log('ProtectedRoute: Token expired');
+          return;
+        }
+
+        // Token is valid
+        setIsAuthenticated(true);
+        setIsLoading(false);
+        console.log('ProtectedRoute: Authentication valid');
+      } catch (error) {
+        // Invalid token or parsing error, clean up
+        console.error('ProtectedRoute Token validation error:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('refreshToken');
+        setIsAuthenticated(false);
+        setIsLoading(false);
+      }
     };
 
     // Small delay to prevent flash
     const timer = setTimeout(checkAuth, 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [location]); // Re-check authentication when location changes
 
   // Show loading state while checking authentication
   if (isLoading) {

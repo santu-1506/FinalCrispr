@@ -10,6 +10,7 @@ import Home from './pages/Home';
 import Predict from './pages/Predict';
 import Results from './pages/Results';
 import Auth from './pages/Auth';
+import EmailVerification from './pages/EmailVerification';
 
 // Styles
 import './App.css';
@@ -44,6 +45,7 @@ function App() {
             {/* Public routes */}
             <Route path="/login" element={<Auth />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/verify-email" element={<EmailVerification />} />
             
             {/* Protected routes */}
             <Route path="/" element={

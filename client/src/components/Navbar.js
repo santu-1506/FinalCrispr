@@ -11,11 +11,13 @@ import {
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
+import { jwtDecode } from 'jwt-decode';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [userFullName, setUserFullName] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -27,27 +29,84 @@ const Navbar = () => {
 
   const isActive = (path) => location.pathname === path;
 
-  // Check authentication status on component mount and when location changes
+  // Check authentication status using JWT token validation
   useEffect(() => {
-    const authStatus = localStorage.getItem('isAuthenticated') === 'true';
-    const email = localStorage.getItem('userEmail') || '';
-    setIsAuthenticated(authStatus);
-    setUserEmail(email);
+    const checkAuth = () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        const userData = localStorage.getItem('userData');
+        
+        if (!token || !userData) {
+          setIsAuthenticated(false);
+          setUserEmail('');
+          setUserFullName('');
+          return;
+        }
+
+        // Verify token is still valid
+        const decodedToken = jwtDecode(token);
+        const currentTime = Date.now() / 1000;
+        
+        if (decodedToken.exp < currentTime) {
+          // Token expired, clean up
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userData');
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('refreshToken');
+          setIsAuthenticated(false);
+          setUserEmail('');
+          setUserFullName('');
+          return;
+        }
+
+        // Token is valid, get user data
+        const user = JSON.parse(userData);
+        setIsAuthenticated(true);
+        setUserEmail(user.email);
+        setUserFullName(user.fullName);
+      } catch (error) {
+        // Invalid token or parsing error, clean up
+        console.error('Token validation error:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('refreshToken');
+        setIsAuthenticated(false);
+        setUserEmail('');
+        setUserFullName('');
+      }
+    };
+
+    checkAuth();
   }, [location]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
-    // Clear saved credentials if user logs out manually
-    localStorage.removeItem('savedEmail');
-    localStorage.removeItem('savedPassword');
-    localStorage.removeItem('rememberMe');
-    localStorage.removeItem('googleAuth');
-    setIsAuthenticated(false);
-    setUserEmail('');
-    toast.success('Logged out successfully');
-    navigate('/auth');
+  const handleLogout = async () => {
+    try {
+      // Clear all authentication data
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('isAuthenticated');
+      
+      // Clear old authentication data (for backward compatibility)
+      localStorage.removeItem('userEmail');
+      localStorage.removeItem('userName');
+      localStorage.removeItem('savedEmail');
+      localStorage.removeItem('savedPassword');
+      localStorage.removeItem('rememberMe');
+      localStorage.removeItem('googleAuth');
+      
+      // Update state
+      setIsAuthenticated(false);
+      setUserEmail('');
+      setUserFullName('');
+      
+      toast.success('Logged out successfully');
+      navigate('/auth');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Logout failed');
+    }
   };
 
   return (
@@ -104,7 +163,7 @@ const Navbar = () => {
                 <div className="flex items-center space-x-3">
                   <div className="flex items-center space-x-2 text-sm text-gray-300">
                     <UserIcon className="w-4 h-4" />
-                    <span className="hidden lg:inline">{userEmail}</span>
+                    <span className="hidden lg:inline">{userFullName || userEmail}</span>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -174,7 +233,7 @@ const Navbar = () => {
               <div className="space-y-1">
                 <div className="px-3 py-2 text-sm text-gray-300 flex items-center space-x-2">
                   <UserIcon className="w-4 h-4" />
-                  <span>{userEmail}</span>
+                  <span>{userFullName || userEmail}</span>
                 </div>
                 <button
                   onClick={() => {
