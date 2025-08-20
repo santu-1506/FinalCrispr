@@ -21,7 +21,25 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters long']
   },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows null values while maintaining uniqueness for non-null values
+    default: null
+  },
   isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  phoneNumber: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows multiple documents to have a null value for this field
+    trim: true,
+    default: null
+    // Add validation for phone number format if needed, e.g., using a library like 'libphonenumber-js'
+  },
+  isPhoneNumberVerified: {
     type: Boolean,
     default: false
   },

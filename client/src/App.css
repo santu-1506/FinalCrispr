@@ -1,6 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+.App {
+  text-align: center;
+}
 
 /* Custom styles */
 .gradient-bg {
@@ -247,4 +247,50 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* In client/src/pages/Auth.js */
+.phone-input-container .PhoneInputInput {
+  background-color: transparent;
+  border: none;
+  color: white;
+  padding: 0.75rem 0;
+  font-size: 1rem;
+  width: 100%;
+}
+
+.phone-input-container .PhoneInputInput:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.phone-input-container .PhoneInputCountry {
+  background-color: #374151; /* bg-gray-700 */
+  border: 1px solid #4b5563; /* border-gray-600 */
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  margin-right: 0.75rem;
+}
+
+.phone-input-container .PhoneInputCountryIcon {
+  box-shadow: none;
+}
+
+.phone-input-container .PhoneInputCountrySelect:focus + .PhoneInputCountryIcon {
+  box-shadow: none;
+}
+
+.phone-input-container .PhoneInput {
+  display: flex;
+  align-items: center;
+  background-color: #1f2937; /* bg-gray-800 */
+  border: 1px solid #4b5563; /* border-gray-600 */
+  border-radius: 0.5rem;
+  padding-left: 0.75rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.phone-input-container .PhoneInput--focus {
+  border-color: #3b82f6; /* border-blue-500 */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); /* ring-2 ring-blue-500/50 */
 }

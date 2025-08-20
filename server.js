@@ -4,7 +4,34 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+const dotenvResult = require('dotenv').config();
+
+if (dotenvResult.error) {
+  console.error('❌ Error loading .env file:', dotenvResult.error);
+} else {
+  console.log('✅ .env file loaded successfully.');
+  // Optional: Uncomment the line below to debug the loaded variables
+  // console.log(dotenvResult.parsed);
+}
+
+// Graceful shutdown and environment variable checks
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_VERIFY_SERVICE_SID',
+];
+
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`❌ FATAL ERROR: Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.error('Please ensure all required variables are set in your .env file.');
+  process.exit(1); // Exit with failure code
+}
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -12,8 +39,16 @@ const PORT = process.env.PORT || 5000;
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-JSON'],
+  maxAge: 86400 // 24 hours
 }));
 
 // Rate limiting

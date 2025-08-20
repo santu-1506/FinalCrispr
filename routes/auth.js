@@ -4,13 +4,18 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { generateToken, generateRefreshToken, authenticateToken, verifyRefreshToken } = require('../middleware/auth');
 const emailService = require('../utils/emailService');
+const twilio = require('twilio');
 
 const router = express.Router();
+
+// Initialize Twilio client
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const twilioVerifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs for auth routes
+  max: 10, // Limit each IP to 10 requests per windowMs for auth routes
   message: {
     success: false,
     message: 'Too many authentication attempts, please try again later',
@@ -438,6 +443,107 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/google
+// @desc    Google OAuth authentication
+// @access  Public
+router.post('/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google credential is required',
+        code: 'CREDENTIAL_REQUIRED'
+      });
+    }
+
+    // Verify and decode the Google JWT token
+    const { OAuth2Client } = require('google-auth-library');
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture, email_verified } = payload;
+
+    if (!email_verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google email is not verified',
+        code: 'EMAIL_NOT_VERIFIED'
+      });
+    }
+
+    // Check if user exists
+    let user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Create new user with Google data
+      user = new User({
+        fullName: name,
+        email: email.toLowerCase(),
+        isEmailVerified: true, // Google emails are pre-verified
+        googleId,
+        profile: {
+          avatar: picture
+        },
+        // Generate a random password for Google users (they won't use it)
+        password: Math.random().toString(36).slice(-8)
+      });
+      await user.save();
+    } else {
+      // Update existing user with Google ID if not already set
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.isEmailVerified = true;
+        if (picture && !user.profile.avatar) {
+          user.profile.avatar = picture;
+        }
+        await user.save();
+      }
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate tokens
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    res.json({
+      success: true,
+      message: 'Google authentication successful',
+      data: {
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          isEmailVerified: user.isEmailVerified,
+          lastLogin: user.lastLogin,
+          profile: user.profile,
+          preferences: user.preferences
+        },
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+      }
+    });
+
+  } catch (error) {
+    console.error('Google authentication error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Google authentication failed. Please try again.',
+      code: 'GOOGLE_AUTH_ERROR'
+    });
+  }
+});
+
 // @route   POST /api/auth/logout
 // @desc    Logout user (client-side token invalidation)
 // @access  Private
@@ -449,5 +555,96 @@ router.post('/logout', authenticateToken, (req, res) => {
     message: 'Logged out successfully'
   });
 });
+
+// @route   POST /api/auth/phone/send-otp
+// @desc    Send OTP to a phone number
+// @access  Public
+router.post('/phone/send-otp', async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  if (!phoneNumber) {
+    return res.status(400).json({ success: false, message: 'Phone number is required.', code: 'PHONE_NUMBER_REQUIRED' });
+  }
+
+  try {
+    const verification = await twilioClient.verify.v2.services(twilioVerifyServiceSid)
+      .verifications
+      .create({ to: phoneNumber, channel: 'sms' });
+
+    res.status(200).json({ success: true, message: 'OTP sent successfully.', sid: verification.sid });
+  } catch (error) {
+    console.error('Twilio send OTP error:', error);
+    // Provide a more specific error message if the phone number is invalid
+    if (error.code === 21211) { // Twilio error code for invalid 'To' number
+        return res.status(400).json({ success: false, message: 'The provided phone number is not valid.', code: 'INVALID_PHONE_NUMBER' });
+    }
+    res.status(500).json({ success: false, message: 'Failed to send OTP. Please try again later.', code: 'TWILIO_SEND_ERROR' });
+  }
+});
+
+// @route   POST /api/auth/phone/verify-otp
+// @desc    Verify OTP and login/signup user
+// @access  Public
+router.post('/phone/verify-otp', async (req, res) => {
+  const { phoneNumber, code } = req.body;
+
+  if (!phoneNumber || !code) {
+    return res.status(400).json({ success: false, message: 'Phone number and OTP code are required.', code: 'VERIFY_DATA_REQUIRED' });
+  }
+
+  try {
+    const verificationCheck = await twilioClient.verify.v2.services(twilioVerifyServiceSid)
+      .verificationChecks
+      .create({ to: phoneNumber, code: code });
+
+    if (verificationCheck.status === 'approved') {
+      let user = await User.findOne({ phoneNumber });
+
+      if (!user) {
+        // User does not exist, create a new one
+        user = new User({
+          phoneNumber,
+          isPhoneNumberVerified: true,
+          // You might want to prompt for a full name on the frontend after signup
+          fullName: `User_${phoneNumber.slice(-4)}`, 
+        });
+      } else {
+        // User exists, update verification status if needed
+        user.isPhoneNumberVerified = true;
+      }
+      
+      user.lastLogin = new Date();
+      await user.save();
+      
+      const token = generateToken(user._id);
+      const refreshToken = generateRefreshToken(user._id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Phone number verified successfully.',
+        data: {
+          token,
+          refreshToken,
+          user: {
+            id: user._id,
+            fullName: user.fullName,
+            phoneNumber: user.phoneNumber,
+            isPhoneNumberVerified: user.isPhoneNumberVerified,
+          }
+        }
+      });
+    } else {
+      res.status(400).json({ success: false, message: 'The OTP you entered is incorrect.', code: 'INVALID_OTP' });
+    }
+  } catch (error) {
+    console.error('Twilio verify OTP error:', error);
+    // Provide a more specific error message if the OTP has expired or was not found
+    if (error.code === 20404) { // Twilio error code for 'No pending verification found'
+        return res.status(404).json({ success: false, message: 'This OTP has expired or is invalid. Please request a new one.', code: 'OTP_EXPIRED_OR_INVALID' });
+    }
+    res.status(400).json({ success: false, message: 'Failed to verify OTP. Please try again.', code: 'TWILIO_VERIFY_ERROR' });
+  }
+});
+
 
 module.exports = router;
