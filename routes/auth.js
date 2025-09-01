@@ -4,13 +4,8 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { generateToken, generateRefreshToken, authenticateToken, verifyRefreshToken } = require('../middleware/auth');
 const emailService = require('../utils/emailService');
-const twilio = require('twilio');
 
 const router = express.Router();
-
-// Initialize Twilio client
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-const twilioVerifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
@@ -556,95 +551,7 @@ router.post('/logout', authenticateToken, (req, res) => {
   });
 });
 
-// @route   POST /api/auth/phone/send-otp
-// @desc    Send OTP to a phone number
-// @access  Public
-router.post('/phone/send-otp', async (req, res) => {
-  const { phoneNumber } = req.body;
 
-  if (!phoneNumber) {
-    return res.status(400).json({ success: false, message: 'Phone number is required.', code: 'PHONE_NUMBER_REQUIRED' });
-  }
-
-  try {
-    const verification = await twilioClient.verify.v2.services(twilioVerifyServiceSid)
-      .verifications
-      .create({ to: phoneNumber, channel: 'sms' });
-
-    res.status(200).json({ success: true, message: 'OTP sent successfully.', sid: verification.sid });
-  } catch (error) {
-    console.error('Twilio send OTP error:', error);
-    // Provide a more specific error message if the phone number is invalid
-    if (error.code === 21211) { // Twilio error code for invalid 'To' number
-        return res.status(400).json({ success: false, message: 'The provided phone number is not valid.', code: 'INVALID_PHONE_NUMBER' });
-    }
-    res.status(500).json({ success: false, message: 'Failed to send OTP. Please try again later.', code: 'TWILIO_SEND_ERROR' });
-  }
-});
-
-// @route   POST /api/auth/phone/verify-otp
-// @desc    Verify OTP and login/signup user
-// @access  Public
-router.post('/phone/verify-otp', async (req, res) => {
-  const { phoneNumber, code } = req.body;
-
-  if (!phoneNumber || !code) {
-    return res.status(400).json({ success: false, message: 'Phone number and OTP code are required.', code: 'VERIFY_DATA_REQUIRED' });
-  }
-
-  try {
-    const verificationCheck = await twilioClient.verify.v2.services(twilioVerifyServiceSid)
-      .verificationChecks
-      .create({ to: phoneNumber, code: code });
-
-    if (verificationCheck.status === 'approved') {
-      let user = await User.findOne({ phoneNumber });
-
-      if (!user) {
-        // User does not exist, create a new one
-        user = new User({
-          phoneNumber,
-          isPhoneNumberVerified: true,
-          // You might want to prompt for a full name on the frontend after signup
-          fullName: `User_${phoneNumber.slice(-4)}`, 
-        });
-      } else {
-        // User exists, update verification status if needed
-        user.isPhoneNumberVerified = true;
-      }
-      
-      user.lastLogin = new Date();
-      await user.save();
-      
-      const token = generateToken(user._id);
-      const refreshToken = generateRefreshToken(user._id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Phone number verified successfully.',
-        data: {
-          token,
-          refreshToken,
-          user: {
-            id: user._id,
-            fullName: user.fullName,
-            phoneNumber: user.phoneNumber,
-            isPhoneNumberVerified: user.isPhoneNumberVerified,
-          }
-        }
-      });
-    } else {
-      res.status(400).json({ success: false, message: 'The OTP you entered is incorrect.', code: 'INVALID_OTP' });
-    }
-  } catch (error) {
-    console.error('Twilio verify OTP error:', error);
-    // Provide a more specific error message if the OTP has expired or was not found
-    if (error.code === 20404) { // Twilio error code for 'No pending verification found'
-        return res.status(404).json({ success: false, message: 'This OTP has expired or is invalid. Please request a new one.', code: 'OTP_EXPIRED_OR_INVALID' });
-    }
-    res.status(400).json({ success: false, message: 'Failed to verify OTP. Please try again.', code: 'TWILIO_VERIFY_ERROR' });
-  }
-});
 
 
 module.exports = router;

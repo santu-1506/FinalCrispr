@@ -10,7 +10,6 @@ import {
   EnvelopeIcon,
   ArrowRightIcon,
   ChevronRightIcon,
-  PhoneIcon,
   CheckCircleIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
@@ -18,7 +17,7 @@ import { toast } from 'react-hot-toast';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
-import PhoneAuthModal from '../components/PhoneAuthModal';
+
 
 // API base URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -35,7 +34,7 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+
   const [passwordValidation, setPasswordValidation] = useState({
     minLength: false,
     hasUppercase: false,
@@ -117,6 +116,8 @@ const Auth = () => {
         localStorage.setItem('authToken', token);
         localStorage.setItem('userData', JSON.stringify(user));
         localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userEmail', user.email); // Add this
+        localStorage.setItem('userName', user.fullName); // Add this
         
         if (refreshToken) {
           localStorage.setItem('refreshToken', refreshToken);
@@ -211,22 +212,7 @@ const Auth = () => {
     }
   };
   
-  const handlePhoneAuthSuccess = (data) => {
-    const { user, token, refreshToken } = data;
-    
-    // Store authentication data consistently
-    localStorage.setItem('authToken', token);
-    localStorage.setItem('userData', JSON.stringify(user));
-    localStorage.setItem('isAuthenticated', 'true');
-    
-    if (refreshToken) {
-      localStorage.setItem('refreshToken', refreshToken);
-    }
-    
-    toast.success(`Welcome, ${user.fullName}!`);
-    const from = location.state?.from?.pathname || '/';
-    navigate(from, { replace: true });
-  };
+
 
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
@@ -244,6 +230,8 @@ const Auth = () => {
         localStorage.setItem('authToken', token);
         localStorage.setItem('userData', JSON.stringify(user));
         localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userEmail', user.email); // Add this
+        localStorage.setItem('userName', user.fullName); // Add this
         
         if (refreshToken) {
           localStorage.setItem('refreshToken', refreshToken);
@@ -276,9 +264,7 @@ const Auth = () => {
     setIsLoading(false);
   };
 
-  const handlePhoneAuth = () => {
-    setIsPhoneModalOpen(true);
-  };
+
 
   const toggleMode = () => {
     setIsLogin(!isLogin);
@@ -460,17 +446,8 @@ const Auth = () => {
                     text={isLogin ? "signin_with" : "signup_with"}
                     shape="rectangular"
                     logo_alignment="center"
-                    width="100%"
+                    width="400"
                   />
-                  
-                  <button
-                    onClick={handlePhoneAuth}
-                    disabled={isLoading}
-                    className="w-full flex items-center justify-center py-3 px-4 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 rounded-lg transition-all duration-300 disabled:opacity-50"
-                  >
-                    <PhoneIcon className="w-5 h-5 mr-3 text-green-400" />
-                    <span className="font-semibold">{isLogin ? 'Sign in with Phone' : 'Sign up with Phone'}</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -487,11 +464,7 @@ const Auth = () => {
           </div>
         </motion.div>
       </div>
-      <PhoneAuthModal
-        isOpen={isPhoneModalOpen}
-        onClose={() => setIsPhoneModalOpen(false)}
-        onAuthSuccess={handlePhoneAuthSuccess}
-      />
+
     </>
   );
 };

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   fullName: {
@@ -14,7 +15,7 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    match: [/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/, 'Please enter a valid email']
   },
   password: {
     type: String,
@@ -24,25 +25,13 @@ const userSchema = new mongoose.Schema({
   googleId: {
     type: String,
     unique: true,
-    sparse: true, // Allows null values while maintaining uniqueness for non-null values
-    default: null
+    sparse: true // Allows null values while maintaining uniqueness for non-null values
   },
   isEmailVerified: {
     type: Boolean,
     default: false
   },
-  phoneNumber: {
-    type: String,
-    unique: true,
-    sparse: true, // Allows multiple documents to have a null value for this field
-    trim: true,
-    default: null
-    // Add validation for phone number format if needed, e.g., using a library like 'libphonenumber-js'
-  },
-  isPhoneNumberVerified: {
-    type: Boolean,
-    default: false
-  },
+
   emailVerificationToken: {
     type: String,
     default: null
@@ -173,7 +162,6 @@ userSchema.methods.resetLoginAttempts = function() {
 
 // Instance method to generate email verification token
 userSchema.methods.generateEmailVerificationToken = function() {
-  const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   
   this.emailVerificationToken = token;
@@ -184,7 +172,6 @@ userSchema.methods.generateEmailVerificationToken = function() {
 
 // Instance method to generate password reset token
 userSchema.methods.generatePasswordResetToken = function() {
-  const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   
   this.passwordResetToken = token;

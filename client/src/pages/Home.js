@@ -44,7 +44,7 @@ const Home = () => {
     { name: 'Prediction Accuracy', value: '85%', description: 'Model accuracy on validation set' },
     { name: 'Processing Time', value: '<200ms', description: 'Average prediction time' },
     { name: 'PAM Validation', value: '100%', description: 'Biological rule compliance' },
-    { name: 'Categories', value: '4', description: 'Prediction result categories' }
+    { name: 'Categories', value: '2', description: 'Prediction result categories' }
   ];
 
   const containerVariants = {

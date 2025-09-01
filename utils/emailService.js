@@ -14,13 +14,16 @@ class EmailService {
       if (process.env.EMAIL_SERVICE && process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
         // Real email service setup (Gmail, SendGrid, etc.)
         this.transporter = nodemailer.createTransport({
-          service: process.env.EMAIL_SERVICE,
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false, // true for 465, false for other ports
           auth: {
             user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD // App password for Gmail
+            pass: process.env.EMAIL_PASSWORD.replace(/\s/g, '') // Remove spaces from app password
           },
-          secure: true,
-          port: 465
+          tls: {
+            rejectUnauthorized: false
+          }
         });
         
         console.log(`📧 Real email setup - ${process.env.EMAIL_SERVICE.toUpperCase()}`);
