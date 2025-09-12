@@ -10,11 +10,32 @@ export const authStorage = {
   getCurrentUser: () => {
     if (!authStorage.isAuthenticated()) return null;
     
-    return {
+    const token = localStorage.getItem('authToken');
+    const userData = localStorage.getItem('userData');
+    
+    let userInfo = {
       email: localStorage.getItem('userEmail'),
       name: localStorage.getItem('userName'),
       isAuthenticated: true
     };
+    
+    // Include token if available
+    if (token) {
+      userInfo.token = token;
+    }
+    
+    // Include full user data if available
+    if (userData) {
+      try {
+        const parsedUserData = JSON.parse(userData);
+        userInfo = { ...userInfo, ...parsedUserData };
+        if (token) userInfo.token = token; // Ensure token is included
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
+    
+    return userInfo;
   },
 
 

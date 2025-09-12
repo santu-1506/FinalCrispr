@@ -13,14 +13,9 @@ import {
   ChartBarIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import { 
-  getCurrentUser, 
-  getUserPredictions, 
-  getUserStats, 
-  deletePrediction,
-  exportUserData
-} from '../utils/userStorage';
+import { format, isValid } from 'date-fns';
+import { getCurrentUser } from '../utils/userStorage';
+import { predictionAPI } from '../utils/api';
 
 const Results = () => {
   const [predictions, setPredictions] = useState([]);
@@ -32,6 +27,31 @@ const Results = () => {
   const [userStats, setUserStats] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
 
+  // Helper function to safely format dates
+  const formatDate = (dateValue) => {
+    try {
+      if (!dateValue) return 'Unknown date';
+      const date = new Date(dateValue);
+      if (!isValid(date)) return 'Invalid date';
+      return format(date, 'MMM dd, yyyy');
+    } catch (error) {
+      console.warn('Date formatting error:', error);
+      return 'Invalid date';
+    }
+  };
+
+  // Helper function to safely parse dates for sorting
+  const parseDate = (dateValue) => {
+    try {
+      if (!dateValue) return new Date(0); // Return epoch for missing dates
+      const date = new Date(dateValue);
+      return isValid(date) ? date : new Date(0);
+    } catch (error) {
+      console.warn('Date parsing error:', error);
+      return new Date(0);
+    }
+  };
+
   useEffect(() => {
     loadUserData();
   }, []);
@@ -40,7 +60,7 @@ const Results = () => {
     filterAndSortPredictions();
   }, [predictions, searchTerm, filterPrediction, sortBy]);
 
-  const loadUserData = () => {
+  const loadUserData = async () => {
     setLoading(true);
     try {
       const user = getCurrentUser();
@@ -51,18 +71,27 @@ const Results = () => {
       }
 
       setCurrentUser(user);
-      const userPredictions = getUserPredictions();
-      const stats = getUserStats();
       
-             setPredictions(userPredictions);
-       setUserStats(stats);
+      // Fetch predictions from the server
+      const response = await predictionAPI.getUserPredictions();
+      const { predictions: userPredictions, stats } = response.data;
+      
+      console.log('User predictions response:', response.data);
+      console.log('User stats:', stats);
+      
+      setPredictions(userPredictions);
+      setUserStats(stats || {});
        
-       if (userPredictions.length === 0) {
-         toast.info('No predictions yet. Start by making your first prediction!');
-       }
+      if (userPredictions.length === 0) {
+        toast('No predictions yet. Start by making your first prediction!', {
+          icon: 'ℹ️',
+        });
+      } else {
+        toast.success(`Loaded ${userPredictions.length} predictions from your account`);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
-      toast.error('Failed to load your results');
+      toast.error('Failed to load your results. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -82,9 +111,13 @@ const Results = () => {
     // Prediction filter
     if (filterPrediction !== 'all') {
       if (filterPrediction === 'success') {
-        filtered = filtered.filter(prediction => prediction.prediction === 1);
+        filtered = filtered.filter(prediction => 
+          (prediction.prediction === 1 || prediction.predictedLabel === 1)
+        );
       } else if (filterPrediction === 'no_edit') {
-        filtered = filtered.filter(prediction => prediction.prediction === 0);
+        filtered = filtered.filter(prediction => 
+          (prediction.prediction === 0 || prediction.predictedLabel === 0)
+        );
       }
     }
 
@@ -92,13 +125,13 @@ const Results = () => {
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(b.timestamp) - new Date(a.timestamp);
+          return parseDate(b.createdAt) - parseDate(a.createdAt);
         case 'oldest':
-          return new Date(a.timestamp) - new Date(b.timestamp);
+          return parseDate(a.createdAt) - parseDate(b.createdAt);
         case 'confidence_high':
-          return b.confidence - a.confidence;
+          return (b.confidence || 0) - (a.confidence || 0);
         case 'confidence_low':
-          return a.confidence - b.confidence;
+          return (a.confidence || 0) - (b.confidence || 0);
         default:
           return 0;
       }
@@ -108,14 +141,10 @@ const Results = () => {
   };
 
   const handleDeletePrediction = (predictionId) => {
-    if (window.confirm('Are you sure you want to delete this prediction?')) {
-      if (deletePrediction(predictionId)) {
-        toast.success('Prediction deleted successfully');
-        loadUserData(); // Reload data
-      } else {
-        toast.error('Failed to delete prediction');
-      }
-    }
+    // TODO: Implement delete prediction API endpoint
+    toast('Delete functionality will be available soon', {
+      icon: 'ℹ️',
+    });
   };
 
      const getPredictionInfo = (prediction) => {
@@ -140,7 +169,14 @@ const Results = () => {
 
   const exportResults = () => {
     try {
-      const userData = exportUserData();
+      // Use current predictions from server data
+      const userData = {
+        user: currentUser,
+        predictions: predictions,
+        stats: userStats,
+        exportDate: new Date().toISOString()
+      };
+      
       const jsonContent = JSON.stringify(userData, null, 2);
       
       const blob = new Blob([jsonContent], { type: 'application/json' });
@@ -213,10 +249,10 @@ const Results = () => {
         className="grid grid-cols-1 md:grid-cols-4 gap-6"
       >
         {[
-          { label: 'Total Predictions', value: userStats.totalPredictions || 0, icon: ChartBarIcon, color: 'blue' },
-          { label: 'Success Rate', value: `${userStats.successRate || 0}%`, icon: DocumentTextIcon, color: 'green' },
-          { label: 'Avg Confidence', value: `${userStats.averageConfidence || 0}%`, icon: ChartBarIcon, color: 'purple' },
-          { label: 'Recent Activity', value: userStats.recentActivity || 0, icon: CalendarIcon, color: 'orange' }
+          { label: 'Total Predictions', value: userStats?.totalPredictions || 0, icon: ChartBarIcon, color: 'blue' },
+          { label: 'Success Rate', value: `${userStats?.successRate || 0}%`, icon: DocumentTextIcon, color: 'green' },
+          { label: 'Avg Confidence', value: `${userStats?.averageConfidence || 0}%`, icon: ChartBarIcon, color: 'purple' },
+          { label: 'Recent Activity', value: userStats?.recentActivity || 0, icon: CalendarIcon, color: 'orange' }
         ].map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -314,14 +350,16 @@ const Results = () => {
             <div>
               <span className="text-gray-300">PAM Matches: </span>
               <span className="font-semibold">
-                {filteredPredictions.filter(p => p.pam_match).length}
+                {filteredPredictions.filter(p => p.pam_match || p.pamMatch).length}
               </span>
             </div>
             <div>
               <span className="text-gray-300">Success Rate: </span>
               <span className="font-semibold">
                 {filteredPredictions.length > 0 
-                  ? Math.round(filteredPredictions.filter(p => p.prediction === 1).length / filteredPredictions.length * 100)
+                  ? Math.round(filteredPredictions.filter(p => 
+                      (p.prediction === 1 || p.predictedLabel === 1)
+                    ).length / filteredPredictions.length * 100)
                   : 0}%
               </span>
             </div>
@@ -338,10 +376,11 @@ const Results = () => {
       >
         {filteredPredictions.length > 0 ? (
           filteredPredictions.map((prediction, index) => {
-            const predictionInfo = getPredictionInfo(prediction.prediction);
+            const predictionValue = prediction.prediction !== undefined ? prediction.prediction : prediction.predictedLabel;
+            const predictionInfo = getPredictionInfo(predictionValue);
             return (
               <motion.div
-                key={prediction.id}
+                key={prediction._id || prediction.id || index}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
@@ -354,10 +393,10 @@ const Results = () => {
                   </div>
                   <div className="flex items-center space-x-2">
                     <div className="text-xs text-gray-400">
-                      {format(new Date(prediction.timestamp), 'MMM dd, yyyy')}
+                      {formatDate(prediction.createdAt)}
                     </div>
                     <button
-                      onClick={() => handleDeletePrediction(prediction.id)}
+                      onClick={() => handleDeletePrediction(prediction._id || prediction.id)}
                       className="text-red-400 hover:text-red-600 transition-colors"
                     >
                       <TrashIcon className="w-4 h-4" />
@@ -385,8 +424,8 @@ const Results = () => {
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-300">Prediction:</span>
-                    <span className={`font-medium ${prediction.prediction === 1 ? 'text-green-600' : 'text-red-600'}`}>
-                      {prediction.prediction === 1 ? 'Success' : 'No Edit'}
+                    <span className={`font-medium ${(prediction.prediction === 1 || prediction.predictedLabel === 1) ? 'text-green-600' : 'text-red-600'}`}>
+                      {(prediction.prediction === 1 || prediction.predictedLabel === 1) ? 'Success' : 'No Edit'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -395,8 +434,8 @@ const Results = () => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-300">PAM Match:</span>
-                    <span className={`font-medium ${prediction.pam_match ? 'text-green-600' : 'text-red-600'}`}>
-                      {prediction.pam_match ? 'Yes' : 'No'}
+                    <span className={`font-medium ${(prediction.pam_match || prediction.pamMatch) ? 'text-green-600' : 'text-red-600'}`}>
+                      {(prediction.pam_match || prediction.pamMatch) ? 'Yes' : 'No'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

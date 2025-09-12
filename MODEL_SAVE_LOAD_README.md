@@ -5,11 +5,13 @@ This guide explains how to save your trained CRISPR model and load it later with
 ## 🎯 Quick Start
 
 ### 1. Train and Save Model (One-time setup)
+
 ```bash
 python train_and_save_model.py
 ```
 
 ### 2. Use Saved Model (Every time after)
+
 ```bash
 python use_saved_model.py
 ```
@@ -24,6 +26,7 @@ python use_saved_model.py
 ## 🔧 How It Works
 
 ### Before (Had to retrain every time):
+
 ```python
 # Train model every time
 model = ViTClassifier()
@@ -33,6 +36,7 @@ predictions = model.predict(X_test)
 ```
 
 ### After (Load saved model):
+
 ```python
 # Load saved model (no training needed)
 from tensorflow.keras.models import load_model
@@ -46,6 +50,7 @@ predictions = model.predict(X_test)
 ## 📋 Usage Examples
 
 ### Example 1: Simple Usage
+
 ```python
 from use_saved_model import load_model, predict_crispr
 
@@ -58,6 +63,7 @@ print(f"Prediction: {result['interpretation']}")
 ```
 
 ### Example 2: Batch Processing
+
 ```python
 from batch_predict import load_model, predict_batch
 
@@ -77,7 +83,9 @@ for result in results:
 ```
 
 ### Example 3: Load from CSV
+
 Create a file `test_sequences.csv`:
+
 ```csv
 sgRNA,DNA
 ATCGATCGATCGATCGATCGATC,ATCGATCGATCGATCGATCGATC
@@ -85,6 +93,7 @@ GCTAGCTAGCTAGCTAGCTAGCT,GCTAGCTAGCTAGCTAGCTAGCT
 ```
 
 Then run:
+
 ```bash
 python batch_predict.py
 ```
@@ -92,11 +101,13 @@ python batch_predict.py
 ## 🚀 Workflow
 
 ### First Time Setup:
+
 1. **Train the model**: `python train_and_save_model.py`
    - This will train the model and save it as `crispr_model.h5`
    - Takes time (30 epochs of training)
 
 ### Every Time After:
+
 1. **Load and use**: `python use_saved_model.py`
    - This loads the saved model instantly
    - No training time needed
@@ -104,6 +115,7 @@ python batch_predict.py
 ## 📊 Model Information
 
 The saved model contains:
+
 - ✅ Complete model architecture
 - ✅ Trained weights
 - ✅ Optimizer state
@@ -114,14 +126,17 @@ File size: ~1-2 MB (depending on model complexity)
 ## 🔍 Troubleshooting
 
 ### "No model found" error:
+
 - Run `python train_and_save_model.py` first
 - Check that `crispr_model.h5` exists in the current directory
 
 ### "Failed to load model" error:
+
 - Make sure you have the same TensorFlow version
 - Check that custom objects (ViTClassifier, PatchEmbedding) are available
 
 ### Memory issues:
+
 - The model loads into memory, so ensure you have enough RAM
 - Close other applications if needed
 
@@ -141,6 +156,7 @@ File size: ~1-2 MB (depending on model complexity)
 ## 🔄 Updating the Model
 
 To retrain and update the saved model:
+
 ```bash
 python train_and_save_model.py
 ```
@@ -150,10 +166,11 @@ This will overwrite the existing `crispr_model.h5` file with the newly trained m
 ## 📝 API Integration
 
 The Flask API in `model_api.py` automatically uses the saved model:
+
 - On startup, it tries to load `crispr_model.h5`
 - If not found, it trains a new model and saves it
 - All predictions use the loaded model
 
 ## 🎉 Success!
 
-You now have a complete save/load system for your CRISPR model. Train once, use many times! 
+You now have a complete save/load system for your CRISPR model. Train once, use many times!

@@ -11,18 +11,79 @@ import {
   ArrowRightIcon,
   ChevronRightIcon,
   CheckCircleIcon,
-  XCircleIcon
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  XCircleIcon,
+  PhoneIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
+import FirebaseMobileLogin from '../components/FirebaseMobileLogin';
 
 
 // API base URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Auth = () => {
+  const [authMode, setAuthMode] = useState('email'); // 'email' or 'mobile'
   const [isLogin, setIsLogin] = useState(true); // Default to signup page as per image
   const [formData, setFormData] = useState({
     email: '',
@@ -285,6 +346,26 @@ const Auth = () => {
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="w-full max-w-md relative z-10"
         >
+          {/* Render Mobile Login or Email Auth based on mode */}
+          <AnimatePresence mode="wait">
+            {authMode === 'mobile' ? (
+              <motion.div
+                key="mobile-login"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <FirebaseMobileLogin onBack={() => setAuthMode('email')} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="email-auth"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+              >
           <div className="relative bg-[#1f2937]/50 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden">
             <div className="p-8 text-center">
               <motion.div whileHover={{ scale: 1.1, rotate: -10 }} className="inline-block mb-4">
@@ -448,6 +529,17 @@ const Auth = () => {
                     logo_alignment="center"
                     width="400"
                   />
+                  
+                  {/* Mobile Number Login Option */}
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setAuthMode('mobile')}
+                    className="w-full flex items-center justify-center px-4 py-3 border border-gray-600 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 text-white font-medium transition-all duration-300 space-x-3"
+                  >
+                    <PhoneIcon className="w-5 h-5 text-blue-400" />
+                    <span>Continue with Firebase OTP</span>
+                  </motion.button>
                 </div>
               </div>
             </div>
@@ -462,6 +554,9 @@ const Auth = () => {
               </span>
             </button>
           </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
 

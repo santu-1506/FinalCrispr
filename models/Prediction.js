@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const predictionSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true // Add index for faster user-specific queries
+  },
   sgRNA: {
     type: String,
     required: true,
@@ -164,6 +170,125 @@ predictionSchema.statics.getPerformanceMetrics = async function(timeRange = '7d'
     confusionMatrix: { tp, tn, fp, fn },
     totalPredictions: total
   };
+};
+
+// Static method to get user-specific predictions
+predictionSchema.statics.getUserPredictions = async function(userId, options = {}) {
+  try {
+    const { limit = 50, skip = 0, sortBy = 'createdAt', sortOrder = -1 } = options;
+    
+    // Convert userId to ObjectId if it's a string
+    const objectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    return await this.find({ userId: objectId })
+      .sort({ [sortBy]: sortOrder })
+      .limit(limit)
+      .skip(skip)
+      .select('-userAgent -ipAddress')
+      .populate('userId', 'fullName email')
+      .lean();
+  } catch (error) {
+    console.error('Error in getUserPredictions:', error);
+    return []; // Return empty array for new users or on error
+  }
+};
+
+// Static method to get user prediction statistics
+predictionSchema.statics.getUserStats = async function(userId) {
+  try {
+    // Convert userId to ObjectId if it's a string
+    const objectId = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    const pipeline = [
+      { $match: { userId: objectId } },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          avgConfidence: { $avg: '$confidence' },
+          avgProcessingTime: { $avg: '$processingTime' }
+        }
+      }
+    ];
+
+    const categoryStats = await this.aggregate(pipeline);
+    const totalPredictions = await this.countDocuments({ userId: objectId });
+
+    // Get recent activity (predictions in last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentActivity = await this.countDocuments({ 
+      userId: objectId, 
+      createdAt: { $gte: sevenDaysAgo } 
+    });
+
+    // Calculate overall average confidence
+    const confidenceAggregate = await this.aggregate([
+      { $match: { userId: objectId } },
+      {
+        $group: {
+          _id: null,
+          averageConfidence: { $avg: '$confidence' }
+        }
+      }
+    ]);
+
+    const averageConfidence = confidenceAggregate.length > 0 ? 
+      Math.round(confidenceAggregate[0].averageConfidence * 10000) / 100 : 0;
+
+    let tp = 0, tn = 0, fp = 0, fn = 0;
+    
+    categoryStats.forEach(item => {
+      switch(item._id) {
+        case 'correct_predicted_correct': tp = item.count; break;
+        case 'wrong_predicted_wrong': tn = item.count; break;
+        case 'wrong_predicted_correct': fp = item.count; break;
+        case 'correct_predicted_wrong': fn = item.count; break;
+      }
+    });
+
+    const accuracy = totalPredictions > 0 ? (tp + tn) / totalPredictions : 0;
+    const precision = (tp + fp) > 0 ? tp / (tp + fp) : 0;
+    const recall = (tp + fn) > 0 ? tp / (tp + fn) : 0;
+
+    // Calculate success rate (percentage of predictions that were "success" - predicted as 1)
+    const successPredictions = tp + fp; // All predictions labeled as success
+    const successRate = totalPredictions > 0 ? (successPredictions / totalPredictions) * 100 : 0;
+
+    return {
+      totalPredictions,
+      accuracy: Math.round(accuracy * 10000) / 100,
+      successRate: Math.round(successRate * 100) / 100,
+      averageConfidence,
+      recentActivity,
+      precision: Math.round(precision * 10000) / 100,
+      recall: Math.round(recall * 10000) / 100,
+      categoryBreakdown: {
+        correct_predicted_correct: tp,
+        wrong_predicted_wrong: tn,
+        wrong_predicted_correct: fp,
+        correct_predicted_wrong: fn
+      }
+    };
+  } catch (error) {
+    console.error('Error in getUserStats:', error);
+    // Return default stats for new users
+    return {
+      totalPredictions: 0,
+      accuracy: 0,
+      successRate: 0,
+      averageConfidence: 0,
+      recentActivity: 0,
+      precision: 0,
+      recall: 0,
+      categoryBreakdown: {
+        correct_predicted_correct: 0,
+        wrong_predicted_wrong: 0,
+        wrong_predicted_correct: 0,
+        correct_predicted_wrong: 0
+      }
+    };
+  }
 };
 
 module.exports = mongoose.model('Prediction', predictionSchema);

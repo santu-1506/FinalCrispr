@@ -11,15 +11,33 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, 'Email is required'],
+    required: function() {
+      return !this.mobileNumber; // Email required only if mobile number not provided
+    },
     unique: true,
+    sparse: true, // Allow null values while maintaining uniqueness
     lowercase: true,
     trim: true,
     match: [/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/, 'Please enter a valid email']
   },
+  mobileNumber: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null values while maintaining uniqueness
+    trim: true,
+    validate: {
+      validator: function(v) {
+        // Allow null/undefined or valid phone number
+        return !v || /^\+?[1-9]\d{1,14}$/.test(v);
+      },
+      message: 'Please enter a valid mobile number'
+    }
+  },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      return !this.mobileNumber; // Password required only if mobile number not provided
+    },
     minlength: [6, 'Password must be at least 6 characters long']
   },
   googleId: {
@@ -27,7 +45,16 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true // Allows null values while maintaining uniqueness for non-null values
   },
+  firebaseUid: {
+    type: String,
+    unique: true,
+    sparse: true // Allows null values while maintaining uniqueness for non-null values
+  },
   isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  isMobileVerified: {
     type: Boolean,
     default: false
   },

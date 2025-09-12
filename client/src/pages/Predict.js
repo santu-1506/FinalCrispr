@@ -9,8 +9,8 @@ import {
   InformationCircleIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
-import { savePredictionResult, getCurrentUser } from '../utils/userStorage';
+import { getCurrentUser } from '../utils/userStorage';
+import { predictionAPI } from '../utils/api';
 
 // Components
 import SequenceInput from '../components/SequenceInput';
@@ -44,8 +44,8 @@ const Predict = () => {
   const loadPredictionDetails = async (predictionId) => {
     setLoadingDetails(true);
     try {
-      const response = await axios.get(`/api/predictions/${predictionId}`);
-      const predictionData = response.data.data;
+      const response = await predictionAPI.getPredictionById(predictionId);
+      const predictionData = response.data;
       
       // Set the sequences from the loaded prediction
       setSequences({
@@ -155,17 +155,15 @@ const Predict = () => {
     setPrediction(null);
 
     try {
-      const response = await axios.post('/api/predictions/text', {
+      const predictionData = {
         sgRNA: sequences.sgRNA.toUpperCase(),
         DNA: sequences.DNA.toUpperCase(),
         actualLabel: sequences.actualLabel
-      });
+      };
 
-      const predictionResult = response.data.data;
+      const response = await predictionAPI.makePrediction(predictionData);
+      const predictionResult = response.data;
       setPrediction(predictionResult);
-      
-      // Save to user's personal storage
-      savePredictionResult(predictionResult);
       
       toast.success('Prediction completed and saved successfully!');
       
@@ -190,10 +188,7 @@ const Predict = () => {
       
       setPrediction(mockResult);
       
-      // Save mock result to user's personal storage
-      savePredictionResult(mockResult);
-      
-      toast.success('Mock prediction generated and saved!');
+      toast.success('Mock prediction generated! (API unavailable, using local simulation)');
     } finally {
       setLoading(false);
     }

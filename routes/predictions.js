@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
 const Prediction = require('../models/Prediction');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -105,7 +106,7 @@ async function callPythonModel(sgRNA, DNA) {
 }
 
 // Text-based prediction endpoint
-router.post('/text', [
+router.post('/text', authenticateToken, [
   body('sgRNA')
     .isLength({ min: 23, max: 23 })
     .matches(/^[ATCG]+$/)
@@ -158,8 +159,9 @@ router.post('/text', [
       predictionSource: modelResult.prediction_source
     });
 
-    // Save prediction to database
+    // Save prediction to database with user ID
     const prediction = new Prediction({
+      userId: req.user._id, // Associate prediction with authenticated user
       sgRNA,
       DNA,
       actualLabel,
@@ -174,7 +176,9 @@ router.post('/text', [
       ipAddress: req.ip
     });
 
+    console.log('Saving prediction for user:', req.user._id, req.user.email);
     await prediction.save();
+    console.log('Prediction saved with ID:', prediction._id);
 
     res.json({
       success: true,
@@ -217,7 +221,7 @@ router.post('/text', [
 });
 
 // Image-based prediction endpoint
-router.post('/image', upload.single('image'), [
+router.post('/image', authenticateToken, upload.single('image'), [
   body('actualLabel')
     .isInt({ min: 0, max: 1 })
     .withMessage('Actual label must be 0 or 1')
@@ -261,8 +265,9 @@ router.post('/image', upload.single('image'), [
       DNA
     );
 
-    // Save prediction to database
+    // Save prediction to database with user ID
     const prediction = new Prediction({
+      userId: req.user._id, // Associate prediction with authenticated user
       sgRNA,
       DNA,
       actualLabel,
@@ -310,7 +315,51 @@ router.post('/image', upload.single('image'), [
   }
 });
 
-// Get recent predictions
+// Get user-specific predictions
+router.get('/my-predictions', authenticateToken, async (req, res) => {
+  try {
+    console.log('Fetching predictions for user:', req.user._id, req.user.email);
+    
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = parseInt(req.query.skip) || 0;
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+    const predictions = await Prediction.getUserPredictions(req.user._id, {
+      limit,
+      skip,
+      sortBy,
+      sortOrder
+    });
+
+    const stats = await Prediction.getUserStats(req.user._id);
+
+    console.log(`Found ${predictions.length} predictions for user ${req.user.email}`);
+    console.log('Stats being returned:', stats);
+
+    res.json({
+      success: true,
+      data: {
+        predictions,
+        stats,
+        pagination: {
+          limit,
+          skip,
+          total: stats.totalPredictions || 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user predictions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your predictions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get recent predictions (global - for analytics)
 router.get('/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
