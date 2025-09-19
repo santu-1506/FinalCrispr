@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "crispr-prediction-frontend": "file:.."
+  }
+}

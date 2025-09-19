@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LockClosedIcon,
   UserIcon,
-  EyeIcon,
+  EyeIcon,  
   EyeSlashIcon,
   BeakerIcon,
   EnvelopeIcon,
