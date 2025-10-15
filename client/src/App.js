@@ -10,6 +10,7 @@ import Home from './pages/Home';
 import Predict from './pages/Predict';
 import Results from './pages/Results';
 import Auth from './pages/Auth';
+import Settings from './pages/Settings';
 import EmailVerification from './pages/EmailVerification';
 
 // Styles
@@ -61,6 +62,11 @@ function App() {
             <Route path="/results" element={
               <ProtectedRoute>
                 <Results />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             } />
           </Routes>

@@ -6,6 +6,8 @@ const { generateToken, generateRefreshToken, authenticateToken, verifyRefreshTok
 const emailService = require('../utils/emailService');
 const twilio = require('twilio');
 const admin = require('firebase-admin');
+const { isSupabaseConfigured, sendPhoneOTP, verifyPhoneOTP } = require('../utils/supabaseServer');
+const TOTPService = require('../utils/totpService');
 
 const router = express.Router();
 
@@ -19,15 +21,15 @@ const twilioClient = twilio(
 if (!admin.apps.length) {
   try {
     // Try to use service account key file first
-    const serviceAccountPath = './crisprai-3be18-firebase-adminsdk-fbsvc-936a655e55.json';
+    const serviceAccountPath = './crisprai-3be18-firebase-adminsdk-fbsvc-619cda2c5b.json';
     const fs = require('fs');
     const path = require('path');
     
     // Try different possible paths
     const possiblePaths = [
       serviceAccountPath,
-      path.join(__dirname, '..', 'crisprai-3be18-firebase-adminsdk-fbsvc-936a655e55.json'),
-      path.join(process.cwd(), 'crisprai-3be18-firebase-adminsdk-fbsvc-936a655e55.json')
+      path.join(__dirname, '..', 'crisprai-3be18-firebase-adminsdk-fbsvc-619cda2c5b.json'),
+      path.join(process.cwd(), 'crisprai-3be18-firebase-adminsdk-fbsvc-619cda2c5b.json')
     ];
     
     let serviceAccount = null;
@@ -239,6 +241,33 @@ router.post('/login', authLimiter, validateLogin, handleValidationErrors, async 
         success: false,
         message: 'Invalid email or password',
         code: 'INVALID_CREDENTIALS'
+      });
+    }
+
+    // Check if this user primarily uses phone authentication
+    if (user.authMethod === 'supabase' || user.authMethod === 'firebase' || user.mobileNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account is registered with phone number. Please use phone authentication instead.',
+        code: 'USE_PHONE_AUTH',
+        data: {
+          mobileNumber: user.mobileNumber,
+          authMethod: user.authMethod
+        }
+      });
+    }
+
+    // Check if this user has TOTP enabled
+    if (user.totpEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account has two-factor authentication enabled. Please use TOTP login instead.',
+        code: 'USE_TOTP_AUTH',
+        data: {
+          email: user.email,
+          totpEnabled: true,
+          authMethod: 'totp'
+        }
       });
     }
 
@@ -1026,7 +1055,7 @@ router.post('/verify-otp', authLimiter, [
 // Firebase Phone Authentication Verification
 router.post('/firebase-verify', authLimiter, async (req, res) => {
   try {
-    const { firebaseUid, phoneNumber, displayName } = req.body;
+    const { firebaseUid, phoneNumber, fullName, password } = req.body;
 
     // Validate required fields
     if (!firebaseUid || !phoneNumber) {
@@ -1034,6 +1063,15 @@ router.post('/firebase-verify', authLimiter, async (req, res) => {
         success: false,
         message: 'Firebase UID and phone number are required',
         code: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+
+    // Validate password for new users
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required and must be at least 6 characters long',
+        code: 'INVALID_PASSWORD'
       });
     }
 
@@ -1052,15 +1090,25 @@ router.post('/firebase-verify', authLimiter, async (req, res) => {
     });
 
     if (user) {
+      // Verify password for existing user
+      const isPasswordValid = await user.comparePassword(password);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid password for existing account',
+          code: 'INVALID_PASSWORD'
+        });
+      }
+
       // Update existing user
       user.mobileNumber = phoneNumber;
       user.firebaseUid = firebaseUid;
       user.isMobileVerified = true;
       user.lastLogin = new Date();
       
-      // Update display name if provided and not already set
-      if (displayName && !user.fullName) {
-        user.fullName = displayName;
+      // Update display name if provided
+      if (fullName) {
+        user.fullName = fullName;
       }
       
       await user.save();
@@ -1070,7 +1118,8 @@ router.post('/firebase-verify', authLimiter, async (req, res) => {
       user = new User({
         mobileNumber: phoneNumber,
         firebaseUid: firebaseUid,
-        fullName: displayName || `User ${phoneNumber.slice(-4)}`,
+        fullName: fullName || `User ${phoneNumber.slice(-4)}`,
+        password: password, // Will be hashed by the User model
         isMobileVerified: true,
         lastLogin: new Date(),
         profile: {
@@ -1084,8 +1133,8 @@ router.post('/firebase-verify', authLimiter, async (req, res) => {
     }
 
     // Generate JWT tokens
-    const token = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
 
     // Return success response
     res.json({
@@ -1116,6 +1165,747 @@ router.post('/firebase-verify', authLimiter, async (req, res) => {
       success: false,
       message: 'Firebase authentication failed. Please try again.',
       code: 'FIREBASE_VERIFY_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/check-phone
+// @desc    Check if user exists with phone number
+// @access  Public
+router.post('/check-phone', [
+  body('mobileNumber')
+    .isMobilePhone()
+    .withMessage('Please provide a valid mobile number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { mobileNumber } = req.body;
+
+    // Find user by mobile number
+    const user = await User.findOne({ mobileNumber });
+    
+    res.json({
+      success: true,
+      data: {
+        userExists: !!user,
+        user: user ? {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          isEmailVerified: user.isEmailVerified,
+          isMobileVerified: user.isMobileVerified
+        } : null
+      }
+    });
+
+  } catch (error) {
+    console.error('Check phone error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check user. Please try again.',
+      code: 'CHECK_PHONE_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/supabase-send-otp
+// @desc    Send OTP via Supabase
+// @access  Public
+router.post('/supabase-send-otp', otpLimiter, [
+  body('mobileNumber')
+    .isMobilePhone()
+    .withMessage('Please provide a valid mobile number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { mobileNumber } = req.body;
+
+    if (!isSupabaseConfigured()) {
+      return res.status(500).json({
+        success: false,
+        message: 'Phone authentication is not configured. Please contact support.',
+        code: 'SUPABASE_NOT_CONFIGURED'
+      });
+    }
+
+    console.log(`🔵 Supabase OTP request for: ${mobileNumber}`);
+
+    // Send OTP via Supabase
+    const result = await sendPhoneOTP(mobileNumber);
+    
+    if (result.success) {
+      console.log(`✅ Supabase OTP sent to: ${mobileNumber}`);
+      
+      res.json({
+        success: true,
+        message: `OTP sent to ${mobileNumber} via Supabase`,
+        data: {
+          mobileNumber,
+          expiresIn: 600, // 10 minutes
+          provider: 'Supabase'
+        }
+      });
+    } else {
+      throw new Error(result.error || 'Failed to send OTP via Supabase');
+    }
+
+  } catch (error) {
+    console.error('Supabase send OTP error:', error);
+    
+    let errorMessage = 'Failed to send OTP. Please try again.';
+    let errorCode = 'SUPABASE_OTP_SEND_ERROR';
+    
+    if (error.message?.includes('rate limit')) {
+      errorMessage = 'Too many requests. Please wait before trying again.';
+      errorCode = 'RATE_LIMIT_EXCEEDED';
+    } else if (error.message?.includes('invalid phone')) {
+      errorMessage = 'Invalid phone number format. Please check and try again.';
+      errorCode = 'INVALID_PHONE_NUMBER';
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: errorMessage,
+      code: errorCode
+    });
+  }
+});
+
+// @route   POST /api/auth/phone-login
+// @desc    Login with phone number and password (for existing users)
+// @access  Public
+router.post('/phone-login', authLimiter, [
+  body('mobileNumber')
+    .isMobilePhone()
+    .withMessage('Please provide a valid mobile number'),
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required'),
+  body('supabaseVerified')
+    .isBoolean()
+    .withMessage('Supabase verification status required')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { mobileNumber, password, supabaseVerified } = req.body;
+
+    if (!supabaseVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number must be verified with OTP first',
+        code: 'OTP_VERIFICATION_REQUIRED'
+      });
+    }
+
+    // Find user by mobile number
+    const user = await User.findOne({ mobileNumber }).select('+password');
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'No account found with this phone number',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Check if account is locked
+    if (user.isLocked) {
+      return res.status(423).json({
+        success: false,
+        message: 'Account is temporarily locked due to too many failed login attempts',
+        code: 'ACCOUNT_LOCKED',
+        data: {
+          lockUntil: user.lockUntil
+        }
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      // Increment login attempts
+      await user.incLoginAttempts();
+      
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password',
+        code: 'INVALID_PASSWORD'
+      });
+    }
+
+    // Reset login attempts on successful login
+    if (user.loginAttempts > 0) {
+      await user.resetLoginAttempts();
+    }
+
+    // Update last login and mobile verification status
+    user.lastLogin = new Date();
+    user.isMobileVerified = true;
+    user.authMethod = 'supabase';
+    await user.save();
+
+    // Generate tokens
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    console.log(`✅ Phone login successful for user: ${user._id}`);
+
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Phone login successful',
+      data: {
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          isEmailVerified: user.isEmailVerified,
+          isMobileVerified: user.isMobileVerified,
+          lastLogin: user.lastLogin,
+          profile: user.profile,
+          preferences: user.preferences
+        },
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+      }
+    });
+
+  } catch (error) {
+    console.error('Phone login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Phone login failed. Please try again.',
+      code: 'PHONE_LOGIN_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/phone-signup
+// @desc    Signup with phone number (for new users)
+// @access  Public
+router.post('/phone-signup', authLimiter, [
+  body('fullName')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Full name must be between 2 and 100 characters'),
+  body('mobileNumber')
+    .isMobilePhone()
+    .withMessage('Please provide a valid mobile number'),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  body('supabaseVerified')
+    .isBoolean()
+    .withMessage('Supabase verification status required')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { fullName, mobileNumber, password, supabaseVerified } = req.body;
+
+    if (!supabaseVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number must be verified with OTP first',
+        code: 'OTP_VERIFICATION_REQUIRED'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({
+      $or: [
+        { mobileNumber },
+        { email: mobileNumber } // In case it was stored as email before
+      ]
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this phone number already exists',
+        code: 'USER_EXISTS'
+      });
+    }
+
+    // Create new user
+    const user = new User({
+      fullName: fullName.trim(),
+      mobileNumber,
+      password,
+      isMobileVerified: true,
+      isEmailVerified: false, // No email provided yet
+      authMethod: 'supabase',
+      lastLogin: new Date(),
+      profile: {
+        phoneVerified: true,
+        verificationMethod: 'supabase'
+      }
+    });
+
+    await user.save();
+
+    // Generate tokens
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    console.log(`✅ Phone signup successful for user: ${user._id}`);
+
+    // Return success response
+    res.status(201).json({
+      success: true,
+      message: 'Account created successfully with phone number!',
+      data: {
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          isEmailVerified: user.isEmailVerified,
+          isMobileVerified: user.isMobileVerified,
+          lastLogin: user.lastLogin,
+          profile: user.profile,
+          preferences: user.preferences,
+          createdAt: user.createdAt
+        },
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+      }
+    });
+
+  } catch (error) {
+    console.error('Phone signup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Account creation failed. Please try again.',
+      code: 'PHONE_SIGNUP_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/check-user-totp
+// @desc    Check if user has TOTP enabled
+// @access  Public
+router.post('/check-user-totp', [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    res.json({
+      success: true,
+      data: {
+        hasTOTP: user ? user.totpEnabled : false,
+        user: user ? {
+          id: user._id,
+          email: user.email,
+          totpEnabled: user.totpEnabled
+        } : null
+      }
+    });
+
+  } catch (error) {
+    console.error('Check user TOTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check user TOTP status',
+      code: 'CHECK_TOTP_ERROR'
+    });
+  }
+});
+
+// ==================== TOTP Authentication Routes ====================
+
+// @route   POST /api/auth/totp/setup
+// @desc    Generate TOTP secret and QR code for user
+// @access  Private (user must be logged in)
+router.post('/totp/setup', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (user.totpEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'TOTP is already enabled for this account',
+        code: 'TOTP_ALREADY_ENABLED'
+      });
+    }
+
+    // Generate secret for this user
+    const { secret, otpAuthUrl } = TOTPService.generateSecret(
+      user.email || user.mobileNumber || user.fullName,
+      'CRISPR Predict'
+    );
+
+    // Generate QR code
+    const qrCodeImage = await TOTPService.generateQRCode(otpAuthUrl);
+
+    // Temporarily store secret (don't save to DB until verified)
+    // In production, you might store this in Redis with expiration
+    global.tempTOTPSecrets = global.tempTOTPSecrets || {};
+    global.tempTOTPSecrets[user._id] = secret;
+
+    console.log(`🔐 TOTP setup initiated for user: ${user._id}`);
+
+    res.json({
+      success: true,
+      message: 'TOTP setup initiated',
+      data: {
+        qrCode: qrCodeImage, // Base64 encoded image
+        manualEntryKey: secret, // In case QR scan doesn't work
+        instructions: {
+          step1: 'Install Google Authenticator, Authy, or similar app',
+          step2: 'Scan the QR code with your authenticator app',
+          step3: 'Enter the 6-digit code from your app to confirm setup'
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('TOTP setup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to setup TOTP',
+      code: 'TOTP_SETUP_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/totp/verify-setup
+// @desc    Verify TOTP token and enable TOTP for user
+// @access  Private
+router.post('/totp/verify-setup', authenticateToken, [
+  body('token')
+    .isLength({ min: 6, max: 6 })
+    .isNumeric()
+    .withMessage('TOTP token must be a 6-digit number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { token } = req.body;
+    const user = await User.findById(req.user._id);
+
+    // Get temporary secret
+    const tempSecret = global.tempTOTPSecrets?.[user._id];
+    if (!tempSecret) {
+      return res.status(400).json({
+        success: false,
+        message: 'No TOTP setup in progress. Please start setup again.',
+        code: 'NO_TOTP_SETUP'
+      });
+    }
+
+    // Verify the token
+    const isValid = TOTPService.verifyToken(tempSecret, token);
+    
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid code. Please check your authenticator app and try again.',
+        code: 'INVALID_TOTP_TOKEN'
+      });
+    }
+
+    // Generate backup codes
+    const backupCodes = TOTPService.generateBackupCodes();
+
+    // Save to database
+    user.totpSecret = tempSecret;
+    user.totpEnabled = true;
+    user.authMethod = 'totp';
+    user.totpBackupCodes = backupCodes.map(code => ({ 
+      code, 
+      used: false,
+      createdAt: new Date()
+    }));
+    await user.save();
+
+    // Clear temporary secret
+    delete global.tempTOTPSecrets[user._id];
+
+    console.log(`✅ TOTP enabled for user: ${user._id}`);
+
+    res.json({
+      success: true,
+      message: 'TOTP enabled successfully! Save your backup codes.',
+      data: {
+        backupCodes: backupCodes,
+        warning: 'Store these backup codes safely. You can use them to access your account if you lose your phone.'
+      }
+    });
+
+  } catch (error) {
+    console.error('TOTP verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify TOTP',
+      code: 'TOTP_VERIFY_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/totp/verify
+// @desc    Verify TOTP token during login
+// @access  Public (but requires user context)
+router.post('/totp/verify', [
+  body('userId')
+    .notEmpty()
+    .withMessage('User ID is required'),
+  body('token')
+    .isLength({ min: 6, max: 6 })
+    .isNumeric()
+    .withMessage('TOTP token must be a 6-digit number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { userId, token } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user || !user.totpEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'TOTP not enabled for this account',
+        code: 'TOTP_NOT_ENABLED'
+      });
+    }
+
+    // Try TOTP verification first
+    const isValidTOTP = TOTPService.verifyToken(user.totpSecret, token);
+    
+    if (isValidTOTP) {
+      console.log(`✅ TOTP verification successful for user: ${user._id}`);
+      return res.json({
+        success: true,
+        message: 'TOTP verification successful'
+      });
+    }
+
+    // If TOTP fails, check backup codes
+    const backupCodeIndex = user.totpBackupCodes.findIndex(
+      backup => backup.code === token.toUpperCase() && !backup.used
+    );
+
+    if (backupCodeIndex !== -1) {
+      // Mark backup code as used
+      user.totpBackupCodes[backupCodeIndex].used = true;
+      await user.save();
+
+      console.log(`✅ Backup code used for user: ${user._id}`);
+      return res.json({
+        success: true,
+        message: 'Backup code verification successful',
+        warning: 'You used a backup code. Consider generating new ones.'
+      });
+    }
+
+    // Both TOTP and backup codes failed
+    console.log(`❌ TOTP verification failed for user: ${user._id}`);
+    res.status(400).json({
+      success: false,
+      message: 'Invalid code. Please check your authenticator app or try a backup code.',
+      code: 'INVALID_TOTP_TOKEN'
+    });
+
+  } catch (error) {
+    console.error('TOTP verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify TOTP',
+      code: 'TOTP_VERIFY_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/totp/login
+// @desc    Complete login with TOTP verification
+// @access  Public
+router.post('/totp/login', authLimiter, [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address'),
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required'),
+  body('totpToken')
+    .isLength({ min: 6, max: 6 })
+    .isNumeric()
+    .withMessage('TOTP token must be a 6-digit number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { email, password, totpToken, rememberMe } = req.body;
+
+    // Find user by email
+    const user = await User.getByEmail(email, true);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
+      });
+    }
+
+    // Check if TOTP is enabled
+    if (!user.totpEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'TOTP is not enabled for this account',
+        code: 'TOTP_NOT_ENABLED'
+      });
+    }
+
+    // Check if account is locked
+    if (user.isLocked) {
+      return res.status(423).json({
+        success: false,
+        message: 'Account is temporarily locked due to too many failed login attempts',
+        code: 'ACCOUNT_LOCKED',
+        data: {
+          lockUntil: user.lockUntil
+        }
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      // Increment login attempts
+      await user.incLoginAttempts();
+      
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+        code: 'INVALID_CREDENTIALS'
+      });
+    }
+
+    // Verify TOTP token
+    const isValidTOTP = TOTPService.verifyToken(user.totpSecret, totpToken);
+    
+    if (!isValidTOTP) {
+      // Check backup codes
+      const backupCodeIndex = user.totpBackupCodes.findIndex(
+        backup => backup.code === totpToken.toUpperCase() && !backup.used
+      );
+
+      if (backupCodeIndex === -1) {
+        await user.incLoginAttempts();
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid TOTP code. Please check your authenticator app or try a backup code.',
+          code: 'INVALID_TOTP_TOKEN'
+        });
+      }
+
+      // Mark backup code as used
+      user.totpBackupCodes[backupCodeIndex].used = true;
+    }
+
+    // Reset login attempts on successful login
+    if (user.loginAttempts > 0) {
+      await user.resetLoginAttempts();
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate tokens
+    const token = generateToken(user._id);
+    const refreshToken = rememberMe ? generateRefreshToken(user._id) : null;
+
+    console.log(`✅ TOTP login successful for user: ${user._id}`);
+
+    // Return success response
+    res.json({
+      success: true,
+      message: 'TOTP login successful',
+      data: {
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
+          isEmailVerified: user.isEmailVerified,
+          isMobileVerified: user.isMobileVerified,
+          totpEnabled: user.totpEnabled,
+          lastLogin: user.lastLogin,
+          profile: user.profile,
+          preferences: user.preferences
+        },
+        token,
+        refreshToken,
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+      }
+    });
+
+  } catch (error) {
+    console.error('TOTP login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'TOTP login failed. Please try again.',
+      code: 'TOTP_LOGIN_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/totp/disable
+// @desc    Disable TOTP for user
+// @access  Private
+router.post('/totp/disable', authenticateToken, [
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required'),
+  body('totpToken')
+    .isLength({ min: 6, max: 6 })
+    .isNumeric()
+    .withMessage('TOTP token must be a 6-digit number')
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { password, totpToken } = req.body;
+    const user = await User.findById(req.user._id).select('+password');
+
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password',
+        code: 'INVALID_PASSWORD'
+      });
+    }
+
+    // Verify TOTP token
+    const isValidTOTP = TOTPService.verifyToken(user.totpSecret, totpToken);
+    if (!isValidTOTP) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid TOTP code',
+        code: 'INVALID_TOTP_TOKEN'
+      });
+    }
+
+    // Disable TOTP
+    user.totpSecret = undefined;
+    user.totpEnabled = false;
+    user.totpBackupCodes = [];
+    user.authMethod = 'email'; // Revert to email auth
+    await user.save();
+
+    console.log(`✅ TOTP disabled for user: ${user._id}`);
+
+    res.json({
+      success: true,
+      message: 'TOTP disabled successfully'
+    });
+
+  } catch (error) {
+    console.error('TOTP disable error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to disable TOTP',
+      code: 'TOTP_DISABLE_ERROR'
     });
   }
 });

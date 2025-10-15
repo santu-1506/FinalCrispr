@@ -137,11 +137,14 @@ router.post('/text', authenticateToken, [
     const modelResult = await callPythonModel(sgRNA, DNA);
     const processingTime = Date.now() - startTime;
 
+    // Calculate PAM-based ground truth for categorization
+    const pamPrediction = checkPAMSequence(sgRNA, DNA);
+    
     // Determine prediction category using PAM-based ground truth
     const category = getPredictionCategory(
       actualLabel, 
       modelResult.prediction, 
-      modelResult.pam_prediction,
+      pamPrediction,
       sgRNA, 
       DNA
     );
@@ -151,12 +154,10 @@ router.post('/text', authenticateToken, [
       sgRNA: sgRNA.slice(0, 10) + '...',
       DNA: DNA.slice(0, 10) + '...',
       userActualLabel: actualLabel,
-      pamBasedActual: checkPAMSequence(sgRNA, DNA),
+      pamBasedActual: pamPrediction,
       modelPrediction: modelResult.prediction,
-      pamPrediction: modelResult.pam_prediction,
       category,
-      confidence: modelResult.confidence,
-      predictionSource: modelResult.prediction_source
+      confidence: modelResult.confidence
     });
 
     // Save prediction to database with user ID
@@ -167,8 +168,8 @@ router.post('/text', authenticateToken, [
       actualLabel,
       predictedLabel: modelResult.prediction,
       confidence: modelResult.confidence,
-      pamMatch: modelResult.pam_match === true || modelResult.pam_match === 1,
-      totalMatches: modelResult.total_matches,
+      pamMatch: pamPrediction === 1,
+      totalMatches: 0, // CRISPR-BERT doesn't use match counting
       category,
       inputType: 'text',
       processingTime,
@@ -190,20 +191,21 @@ router.post('/text', authenticateToken, [
           label: modelResult.prediction,
           confidence: Math.round(modelResult.confidence * 100),
           category,
-          pamMatch: modelResult.pam_match === true || modelResult.pam_match === 1
+          pamMatch: pamPrediction === 1
         },
         metrics: {
-          totalMatches: modelResult.total_matches,
+          totalMatches: 0, // CRISPR-BERT doesn't use match counting
           processingTime
         },
-        prediction_source: modelResult.prediction_source,
-        model_prediction: modelResult.model_prediction,
-        model_confidence: modelResult.model_confidence,
-        pam_prediction: modelResult.pam_prediction,
+        // Model details
+        model_info: {
+          probabilities: modelResult.probabilities,
+          threshold_used: modelResult.threshold_used
+        },
         // Additional debugging info
         categorization_info: {
           user_actual_label: actualLabel,
-          pam_based_actual: checkPAMSequence(sgRNA, DNA),
+          pam_based_actual: pamPrediction,
           final_prediction: modelResult.prediction,
           category_explanation: getCategoryExplanation(category)
         }
@@ -256,11 +258,14 @@ router.post('/image', authenticateToken, upload.single('image'), [
     const modelResult = await callPythonModel(sgRNA, DNA);
     const processingTime = Date.now() - startTime;
 
+    // Calculate PAM-based ground truth for categorization
+    const pamPrediction = checkPAMSequence(sgRNA, DNA);
+    
     // Determine prediction category using PAM-based ground truth
     const category = getPredictionCategory(
       actualLabel, 
       modelResult.prediction, 
-      modelResult.pam_prediction,
+      pamPrediction,
       sgRNA, 
       DNA
     );
@@ -273,8 +278,8 @@ router.post('/image', authenticateToken, upload.single('image'), [
       actualLabel,
       predictedLabel: modelResult.prediction,
       confidence: modelResult.confidence,
-      pamMatch: modelResult.pam_match === true || modelResult.pam_match === 1,
-      totalMatches: modelResult.total_matches,
+      pamMatch: pamPrediction === 1,
+      totalMatches: 0, // CRISPR-BERT doesn't use match counting
       category,
       inputType: 'image',
       imageUrl: `/uploads/${req.file.filename}`,
@@ -296,10 +301,10 @@ router.post('/image', authenticateToken, upload.single('image'), [
           label: modelResult.prediction,
           confidence: Math.round(modelResult.confidence * 100),
           category,
-          pamMatch: modelResult.pam_match === true || modelResult.pam_match === 1
+          pamMatch: pamPrediction === 1
         },
         metrics: {
-          totalMatches: modelResult.total_matches,
+          totalMatches: 0, // CRISPR-BERT doesn't use match counting
           processingTime
         }
       }

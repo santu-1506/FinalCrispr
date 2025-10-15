@@ -1,477 +1,377 @@
 #!/usr/bin/env python3
 """
-CRISPR Prediction Model API
-Flask API to serve CRISPR gene editing success predictions
+CRISPR-BERT Prediction API
+Flask API serving CRISPR off-target predictions using hybrid CNN-BERT architecture
 """
 
 import os
 import warnings
 
-# Suppress all warnings
+# Suppress warnings
 warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logging
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN custom operations
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pickle
+import json
 import logging
 from datetime import datetime
+
+# CRISPR-BERT imports
+from sequence_encoder import encode_for_cnn, encode_for_bert
+from data_loader import load_dataset
 
 # Suppress TensorFlow warnings
 tf.get_logger().setLevel('ERROR')
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
 
-# Global variables for model and data
+# Global model and configuration
 model = None
-training_data = None
+threshold = 0.5
+model_loaded = False
 
-class PatchEmbedding(layers.Layer):
-    """Patch embedding layer for Vision Transformer"""
-    def __init__(self, embed_dim, **kwargs):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.projection = layers.Dense(embed_dim)
-        
-    def call(self, x):
-        batch_size = tf.shape(x)[0]
-        patches = tf.reshape(x, [batch_size, 23*23, 1])
-        return self.projection(patches)
-    
-    def get_config(self):
-        """Return the config of the layer."""
-        config = super().get_config()
-        config.update({'embed_dim': self.embed_dim})
-        return config
-    
-    @classmethod
-    def from_config(cls, config):
-        """Create a layer from its config."""
-        return cls(**config)
+# Configuration
+MODEL_PATH = 'final/weight/final_model.keras'
+THRESHOLD_PATH = 'final/weight/threshold_schedule.json'
 
-class SimpleCNNClassifier(keras.Model):
-    """Simple CNN Classifier for CRISPR prediction - memory efficient"""
-    def __init__(self, num_classes=2, **kwargs):
-        super().__init__(**kwargs)
-        
-        # Simple CNN layers
-        self.conv1 = layers.Conv2D(8, (3, 3), activation='relu', padding='same')
-        self.pool1 = layers.MaxPooling2D((2, 2))
-        self.dropout1 = layers.Dropout(0.3)
-        
-        self.conv2 = layers.Conv2D(16, (3, 3), activation='relu', padding='same')
-        self.pool2 = layers.MaxPooling2D((2, 2))
-        self.dropout2 = layers.Dropout(0.4)
-        
-        self.conv3 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')
-        self.pool3 = layers.MaxPooling2D((2, 2))
-        self.dropout3 = layers.Dropout(0.5)
-        
-        # Global average pooling instead of flatten to reduce parameters
-        self.global_pool = layers.GlobalAveragePooling2D()
-        self.dense1 = layers.Dense(16, activation='relu')
-        self.dropout4 = layers.Dropout(0.6)
-        self.classifier = layers.Dense(num_classes)
-        
-    def call(self, x, training=None):
-        x = self.conv1(x)
-        x = self.pool1(x)
-        x = self.dropout1(x, training=training)
-        
-        x = self.conv2(x)
-        x = self.pool2(x)
-        x = self.dropout2(x, training=training)
-        
-        x = self.conv3(x)
-        x = self.pool3(x)
-        x = self.dropout3(x, training=training)
-        
-        x = self.global_pool(x)
-        x = self.dense1(x)
-        x = self.dropout4(x, training=training)
-        
-        return self.classifier(x)
-    
-    def get_config(self):
-        """Return the config of the layer."""
-        config = super().get_config()
-        config.update({
-            'num_classes': 2  # Default value
-        })
-        return config
-    
-    @classmethod
-    def from_config(cls, config):
-        """Create a layer from its config."""
-        return cls(**config)
 
-def generate_match_matrix(sgRNA, DNA):
-    """Create binary matrix showing base matches between sequences"""
-    matrix = np.zeros((23, 23), dtype=int)
-    for i in range(23):  # For each base in sgRNA
-        for j in range(23):  # Compare against each base in DNA
-            if sgRNA[i] == DNA[j]:
-                matrix[i][j] = 1
-    return matrix
-
-def check_pam_sequence(sgRNA, DNA):
-    """Check if sequences have matching PAM (NGG) pattern at end"""
-    sgRNA_pam = sgRNA[-3:]
-    DNA_pam = DNA[-3:]
-    
-    # For CRISPR Cas9, PAM is NGG where N can be any nucleotide
-    # Both sequences must end with GG for Cas9 to cut
-    if sgRNA_pam[-2:] == "GG" and DNA_pam[-2:] == "GG":
-        # Also check if the first base matches (N matches N)
-        if sgRNA_pam[0] == DNA_pam[0]:
-            return 1
-    return 0
-
-def predict_with_pam_fallback(sgRNA, DNA, model):
-    """
-    Enhanced prediction using PAM-based ground truth with model confidence scoring
-    Now prioritizes biological accuracy over potentially flawed AI model
-    """
-    # Generate match matrix for model
-    match_matrix = generate_match_matrix(sgRNA, DNA)
-    X_input = np.expand_dims(match_matrix, axis=(0, -1)).astype(np.float32)
-    
-    # Model prediction (for confidence scoring only)
-    logits = model.predict(X_input, verbose=0)
-    probabilities = tf.nn.softmax(logits[0]).numpy()
-    model_prediction = np.argmax(probabilities)
-    model_confidence = probabilities[model_prediction]
-    
-    # PAM-based ground truth (biological accuracy)
-    pam_prediction = check_pam_sequence(sgRNA, DNA)
-    
-    # UPDATED LOGIC: Always use PAM as ground truth, but provide model insights
-    final_prediction = pam_prediction
-    prediction_source = "PAM_rule"
-    
-    # Confidence based on PAM rule strength
-    if pam_prediction == 1:
-        confidence = 0.95  # High confidence for PAM matches
-    else:
-        confidence = 0.85  # High confidence for PAM mismatches
-    
-    # Adjust confidence if model agrees with PAM rule
-    if model_prediction == pam_prediction:
-        confidence = min(0.98, confidence + 0.05)  # Boost if model agrees
-        prediction_source = "PAM_rule + AI_agreement"
-    
-    return {
-        'prediction': final_prediction,
-        'confidence': confidence,
-        'model_prediction': model_prediction,
-        'model_confidence': model_confidence,
-        'pam_prediction': pam_prediction,
-        'prediction_source': prediction_source,
-        'pam_match': pam_prediction == 1,
-        'biological_accuracy': True  # Now based on PAM rules
-    }
-
-def load_training_data():
-    """Load and prepare training data"""
-    global training_data
+def load_trained_model():
+    """Load the trained CRISPR-BERT model"""
+    global model, threshold, model_loaded
     
     try:
-        # Load CRISPR sequence data
-        df = pd.read_csv("I2.txt", sep=',', header=None)
-        df.columns = ['sgRNA', 'DNA', 'label']
-        
-        # Keep only valid 23-base sequences
-        df = df[(df['sgRNA'].str.len() == 23) & (df['DNA'].str.len() == 23)]
-        
-        # Generate match matrices for each sequence pair
-        df['match_matrix'] = df.apply(lambda row: generate_match_matrix(row['sgRNA'], row['DNA']), axis=1)
-        
-        # Generate PAM-based labels
-        pam_labels = [check_pam_sequence(row['sgRNA'], row['DNA']) for _, row in df.iterrows()]
-        df['pam_label'] = pam_labels
-        
-        training_data = df
-        logger.info(f"Loaded {len(df)} sequence pairs for training")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to load training data: {str(e)}")
-        return False
-
-def train_model():
-    """Train the CRISPR prediction model"""
-    global model, training_data
-    
-    if training_data is None:
-        logger.error("No training data available")
-        return False
-    
-    try:
-        # Prepare data for model training
-        X = np.stack(training_data['match_matrix'].values)
-        X = np.expand_dims(X, axis=-1).astype(np.float32)
-        y = np.array(training_data['pam_label'].values).astype(np.int32)
-        
-        # Create and compile model with extremely slow learning rate
-        model = SimpleCNNClassifier()
-        model.compile(
-            optimizer=keras.optimizers.Adam(
-                learning_rate=0.0001,  # Extremely slow learning rate
-                weight_decay=0.01  # Add weight decay for regularization
-            ),
-            loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            metrics=['accuracy']
-        )
-        
-        # Initialize model with dummy data
-        dummy_input = tf.zeros((1, 23, 23, 1))
-        _ = model(dummy_input)
-        
-        logger.info(f"Model parameters: {model.count_params():,}")
-        
-        # Train the model with parameters for very gradual learning (9-15 epochs)
-        history = model.fit(
-            X, y,
-            batch_size=16,  # Even smaller batch size to prevent OOM
-            epochs=30,
-            validation_split=0.2,
-            callbacks=[
-                keras.callbacks.EarlyStopping(
-                    monitor='val_accuracy',  # Monitor accuracy instead of loss
-                    patience=12,  # Even more patience to allow gradual learning
-                    min_delta=0.01,  # Require 1% improvement
-                    restore_best_weights=True,
-                    verbose=1
-                ),
-                keras.callbacks.ReduceLROnPlateau(
-                    monitor='val_accuracy',
-                    factor=0.8,  # Even less aggressive LR reduction
-                    patience=6,  # More patience before reducing LR
-                    min_delta=0.005,  # 0.5% improvement required
-                    verbose=1
-                )
-            ],
-            verbose=1
-        )
-        
-        logger.info(f"Model training completed. Final accuracy: {history.history.get('val_accuracy', [0])[-1]:.4f}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Model training failed: {str(e)}")
-        return False
-
-def save_model():
-    """Save the trained model"""
-    global model
-    
-    if model is None:
-        return False
-    
-    try:
-        # Save the entire model (architecture + weights + optimizer state)
-        model.save('crispr_model.h5', save_format='h5')
-        logger.info("Complete model saved successfully to crispr_model.h5")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to save model: {str(e)}")
-        return False
-
-def load_model():
-    """Load a pre-trained model"""
-    global model
-    
-    try:
-        if os.path.exists('crispr_model.h5'):
-            # Load the entire model
-            model = tf.keras.models.load_model('crispr_model.h5', custom_objects={
-                'SimpleCNNClassifier': SimpleCNNClassifier,
-                'PatchEmbedding': PatchEmbedding
-            })
-            logger.info("Pre-trained model loaded successfully from crispr_model.h5")
-            return True
-        else:
-            logger.info("No pre-trained model found at crispr_model.h5, will train new model")
+        # Check if model exists
+        if not os.path.exists(MODEL_PATH):
+            logger.error(f"Model not found at {MODEL_PATH}")
+            logger.info("Please train the model first using train_model.py from the final/ directory")
             return False
+        
+        logger.info(f"Loading CRISPR-BERT model from {MODEL_PATH}...")
+        # Load with safe_mode=False to allow Lambda layers (trusted model)
+        model = keras.models.load_model(MODEL_PATH, safe_mode=False)
+        logger.info("✓ Model loaded successfully")
+        
+        # Load adaptive threshold
+        if os.path.exists(THRESHOLD_PATH):
+            with open(THRESHOLD_PATH, 'r') as f:
+                data = json.load(f)
+                threshold = data.get('final_threshold', 0.5)
+                logger.info(f"✓ Using adaptive threshold: {threshold:.3f}")
+        else:
+            logger.info("Using default threshold: 0.5")
+        
+        model_loaded = True
+        return True
         
     except Exception as e:
         logger.error(f"Failed to load model: {str(e)}")
         return False
 
-def model_exists():
-    """Check if a saved model exists"""
-    return os.path.exists('crispr_model.h5')
+
+def predict_single(sgrna, dna):
+    """
+    Make prediction for a single sgRNA-DNA pair
+    
+    Args:
+        sgrna: Guide RNA sequence
+        dna: Target DNA sequence
+    
+    Returns:
+        dict: Prediction results with probabilities
+    """
+    global model, threshold
+    
+    if model is None:
+        raise RuntimeError("Model not loaded")
+    
+    # Encode sequences
+    cnn_input = encode_for_cnn(sgrna, dna)  # (26, 7)
+    token_ids = encode_for_bert(sgrna, dna)  # (26,)
+    segment_ids = np.zeros(26, dtype=np.int32)
+    position_ids = np.arange(26, dtype=np.int32)
+    
+    # Add batch dimension
+    inputs = {
+        'cnn_input': cnn_input[np.newaxis, ...],
+        'token_ids': token_ids[np.newaxis, ...],
+        'segment_ids': segment_ids[np.newaxis, ...],
+        'position_ids': position_ids[np.newaxis, ...]
+    }
+    
+    # Make prediction
+    probabilities = model.predict(inputs, verbose=0)
+    
+    # Apply threshold
+    predicted_class = int((probabilities[0, 1] >= threshold))
+    confidence = float(probabilities[0, predicted_class])
+    
+    return {
+        'prediction': predicted_class,
+        'confidence': confidence,
+        'probabilities': {
+            'class_0': float(probabilities[0, 0]),
+            'class_1': float(probabilities[0, 1])
+        },
+        'threshold_used': float(threshold)
+    }
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
+        'model_loaded': model_loaded,
         'timestamp': datetime.now().isoformat(),
-        'model_loaded': model is not None,
-        'data_loaded': training_data is not None
+        'model_path': MODEL_PATH,
+        'threshold': float(threshold) if model_loaded else None
     })
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """Make CRISPR prediction for given sequences"""
-    global model
+    """
+    Main prediction endpoint
     
-    if model is None:
+    Request body:
+        {
+            "sgRNA": "GGTGAGTGAGTGTGTGCGTGTGG",
+            "DNA": "TGTGAGTGTGTGTGTGTGTGTGT"
+        }
+    
+    Response:
+        {
+            "prediction": 0 or 1,
+            "confidence": 0.0-1.0,
+            "probabilities": {
+                "class_0": 0.0-1.0,
+                "class_1": 0.0-1.0
+            },
+            "sgRNA": "...",
+            "DNA": "...",
+            "timestamp": "..."
+        }
+    """
+    if not model_loaded:
         return jsonify({
             'error': 'Model not loaded',
-            'message': 'Please wait for model to initialize'
+            'message': 'Please wait for model initialization or check server logs'
         }), 503
     
     try:
+        # Parse request
         data = request.get_json()
         
         if not data or 'sgRNA' not in data or 'DNA' not in data:
             return jsonify({
-                'error': 'Missing required fields',
+                'error': 'Invalid request',
                 'message': 'Both sgRNA and DNA sequences are required'
             }), 400
         
-        sgRNA = data['sgRNA'].upper()
-        DNA = data['DNA'].upper()
+        sgrna = data['sgRNA'].upper().strip()
+        dna = data['DNA'].upper().strip()
         
         # Validate sequences
-        if len(sgRNA) != 23 or len(DNA) != 23:
+        if len(sgrna) != 23 or len(dna) != 23:
             return jsonify({
                 'error': 'Invalid sequence length',
-                'message': 'Both sequences must be exactly 23 nucleotides long'
+                'message': 'Both sequences must be exactly 23 nucleotides long',
+                'received_lengths': {
+                    'sgRNA': len(sgrna),
+                    'DNA': len(dna)
+                }
             }), 400
         
-        if not all(base in 'ATCG' for base in sgRNA + DNA):
+        valid_bases = set('ATCG')
+        if not all(base in valid_bases for base in sgrna + dna):
             return jsonify({
                 'error': 'Invalid nucleotides',
                 'message': 'Sequences must contain only A, T, C, G nucleotides'
             }), 400
         
-        # Generate match matrix
-        match_matrix = generate_match_matrix(sgRNA, DNA)
-        X_input = np.expand_dims(match_matrix, axis=(0, -1)).astype(np.float32)
+        # Make prediction
+        result = predict_single(sgrna, dna)
         
-        # Advanced prediction with PAM fallback
-        prediction_result = predict_with_pam_fallback(sgRNA, DNA, model)
-        
-        # Calculate total matches for additional info
-        total_matches = int(np.sum(match_matrix))
-        
-        result = {
-            'sgRNA': sgRNA,
-            'DNA': DNA,
-            'prediction': int(prediction_result['prediction']),
-            'confidence': float(prediction_result['confidence']),
-            'prediction_source': prediction_result['prediction_source'],
-            'model_prediction': int(prediction_result['model_prediction']),
-            'model_confidence': float(prediction_result['model_confidence']),
-            'pam_prediction': int(prediction_result['pam_prediction']),
-            'probabilities': {
-                'no_edit': float(1 - prediction_result['confidence']) if prediction_result['prediction'] == 1 else float(prediction_result['confidence']),
-                'success': float(prediction_result['confidence']) if prediction_result['prediction'] == 1 else float(1 - prediction_result['confidence'])
-            },
-            'pam_match': prediction_result['pam_match'],
-            'total_matches': total_matches,
-            'match_matrix': match_matrix.tolist(),
+        # Add request info to response
+        result.update({
+            'sgRNA': sgrna,
+            'DNA': dna,
             'timestamp': datetime.now().isoformat()
-        }
+        })
         
-        logger.info(f"Prediction made: {sgRNA} vs {DNA} -> {prediction_result['prediction']} ({prediction_result['confidence']:.3f}) via {prediction_result['prediction_source']}")
+        # Log prediction
+        logger.info(
+            f"Prediction: {sgrna} vs {dna} → "
+            f"Class {result['prediction']} "
+            f"(confidence: {result['confidence']:.3f})"
+        )
         
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
+        logger.error(f"Prediction error: {str(e)}", exc_info=True)
         return jsonify({
             'error': 'Prediction failed',
             'message': str(e)
         }), 500
 
-@app.route('/model/info', methods=['GET'])
-def model_info():
-    """Get model information"""
-    global model, training_data
-    
-    info = {
-        'model_loaded': model is not None,
-        'data_loaded': training_data is not None,
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    if model is not None:
-        info['model_params'] = model.count_params()
-    
-    if training_data is not None:
-        info['training_samples'] = len(training_data)
-        info['label_distribution'] = training_data['pam_label'].value_counts().to_dict()
-    
-    return jsonify(info)
 
-@app.route('/model/retrain', methods=['POST'])
-def retrain_model():
-    """Retrain the model"""
+@app.route('/batch_predict', methods=['POST'])
+def batch_predict():
+    """
+    Batch prediction endpoint
+    
+    Request body:
+        {
+            "sequences": [
+                {"sgRNA": "...", "DNA": "..."},
+                {"sgRNA": "...", "DNA": "..."}
+            ]
+        }
+    
+    Response:
+        {
+            "predictions": [
+                {"prediction": 0, "confidence": 0.95, ...},
+                ...
+            ],
+            "count": 2,
+            "timestamp": "..."
+        }
+    """
+    if not model_loaded:
+        return jsonify({
+            'error': 'Model not loaded',
+            'message': 'Please wait for model initialization'
+        }), 503
+    
     try:
-        logger.info("Starting model retraining...")
+        data = request.get_json()
         
-        if not load_training_data():
+        if not data or 'sequences' not in data:
             return jsonify({
-                'error': 'Failed to load training data'
-            }), 500
+                'error': 'Invalid request',
+                'message': 'sequences array is required'
+            }), 400
         
-        if not train_model():
+        sequences = data['sequences']
+        
+        if not isinstance(sequences, list) or len(sequences) == 0:
             return jsonify({
-                'error': 'Model training failed'
-            }), 500
+                'error': 'Invalid request',
+                'message': 'sequences must be a non-empty array'
+            }), 400
         
-        save_model()
+        # Process each sequence
+        results = []
+        for i, seq in enumerate(sequences):
+            try:
+                sgrna = seq['sgRNA'].upper().strip()
+                dna = seq['DNA'].upper().strip()
+                
+                result = predict_single(sgrna, dna)
+                result['sgRNA'] = sgrna
+                result['DNA'] = dna
+                result['index'] = i
+                results.append(result)
+                
+            except Exception as e:
+                results.append({
+                    'index': i,
+                    'error': str(e),
+                    'sgRNA': seq.get('sgRNA', ''),
+                    'DNA': seq.get('DNA', '')
+                })
         
         return jsonify({
-            'message': 'Model retrained successfully',
+            'predictions': results,
+            'count': len(results),
             'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
-        logger.error(f"Retraining error: {str(e)}")
+        logger.error(f"Batch prediction error: {str(e)}", exc_info=True)
         return jsonify({
-            'error': 'Retraining failed',
+            'error': 'Batch prediction failed',
             'message': str(e)
         }), 500
 
+
+@app.route('/model/info', methods=['GET'])
+def model_info():
+    """Get model information"""
+    info = {
+        'model_loaded': model_loaded,
+        'model_type': 'CRISPR-BERT (Hybrid CNN-BERT)',
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    if model_loaded:
+        info.update({
+            'model_path': MODEL_PATH,
+            'threshold': float(threshold),
+            'architecture': {
+                'cnn_branch': 'Inception CNN (multi-scale convolutions)',
+                'bert_branch': 'Transformer with multi-head attention',
+                'bigru_layers': 'Bidirectional GRU (20+20 units)',
+                'weights': 'CNN: 20%, BERT: 80%',
+                'output': 'Binary classification (on-target vs off-target)'
+            },
+            'input_format': {
+                'sgRNA_length': 23,
+                'DNA_length': 23,
+                'encoding': {
+                    'cnn': '26x7 matrix (with [CLS] and [SEP] tokens)',
+                    'bert': '26 token IDs'
+                }
+            }
+        })
+    
+    return jsonify(info)
+
+
 def initialize_app():
     """Initialize the application"""
-    logger.info("Initializing CRISPR Prediction API...")
+    logger.info("=" * 60)
+    logger.info("CRISPR-BERT Prediction API")
+    logger.info("Hybrid CNN-BERT Architecture for Off-Target Prediction")
+    logger.info("=" * 60)
     
-    # Load training data
-    if not load_training_data():
-        logger.error("Failed to load training data")
-        return False
+    success = load_trained_model()
     
-    # Try to load existing model, otherwise train new one
-    if not load_model():
-        logger.info("Training new model...")
-        if not train_model():
-            logger.error("Failed to train model")
-            return False
-        save_model()
+    if success:
+        logger.info("✓ API ready to serve predictions")
+    else:
+        logger.warning("⚠ API started but model not loaded")
+        logger.warning("Please train the model using: python final/train_model.py")
     
-    logger.info("CRISPR Prediction API initialized successfully")
-    return True
+    return success
+
 
 if __name__ == '__main__':
-    if initialize_app():
-        app.run(host='0.0.0.0', port=5001, debug=False)
-    else:
-        logger.error("Failed to initialize application")
-        exit(1)
+    initialize_app()
+    
+    # Run Flask app
+    port = int(os.environ.get('PORT', 5001))
+    logger.info(f"\nStarting server on port {port}...")
+    logger.info("=" * 60)
+    
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False
+    )

@@ -50,6 +50,38 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true // Allows null values while maintaining uniqueness for non-null values
   },
+  supabaseId: {
+    type: String,
+    unique: true,
+    sparse: true // Allows null values while maintaining uniqueness for non-null values
+  },
+  authMethod: {
+    type: String,
+    enum: ['email', 'google', 'firebase', 'supabase', 'phone', 'totp'],
+    default: 'email'
+  },
+  totpSecret: {
+    type: String,
+    default: null
+  },
+  totpEnabled: {
+    type: Boolean,
+    default: false
+  },
+  totpBackupCodes: [{
+    code: {
+      type: String,
+      required: true
+    },
+    used: {
+      type: Boolean,
+      default: false
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   isEmailVerified: {
     type: Boolean,
     default: false

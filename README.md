@@ -1,32 +1,58 @@
-# CRISPR Gene Editing Success Prediction Platform
+# CRISPR-BERT: Off-Target Prediction Platform
 
-A comprehensive MERN stack application that predicts CRISPR gene editing success rates using advanced Vision Transformer (ViT) machine learning models.
+A comprehensive full-stack application for predicting CRISPR-Cas9 off-target effects using a state-of-the-art hybrid CNN-BERT deep learning architecture.
 
 ## 🧬 Overview
 
-This platform combines cutting-edge AI technology with biological expertise to provide accurate CRISPR-Cas9 gene editing predictions. It features a modern web interface, real-time analytics, and support for both text and image-based sequence inputs.
+This platform combines cutting-edge AI technology with biological expertise to provide accurate CRISPR off-target predictions. It features a modern web interface, hybrid CNN-BERT model architecture, real-time analytics, and comprehensive prediction management.
+
+**Model Architecture**: CRISPR-BERT combines Inception-based CNN (20%) and BERT transformer (80%) architectures with BiGRU layers for superior sequence analysis and off-target prediction.
 
 ## ✨ Features
 
 ### 🔬 Core Functionality
 
-- **AI-Powered Predictions**: Vision Transformer model analyzes sequence compatibility
-- **Multiple Input Types**: Support for text sequences and image recognition
-- **Real-time Processing**: Predictions completed in <200ms
-- **PAM Sequence Validation**: Biological accuracy with NGG pattern checking
+- **Hybrid CNN-BERT Model**: State-of-the-art deep learning architecture
+- **Multi-scale Feature Extraction**: Inception CNN for local patterns
+- **Transformer Attention**: BERT-based sequence understanding
+- **Bidirectional Processing**: BiGRU layers for context modeling
+- **Real-time Predictions**: Fast inference with <200ms latency
+- **Adaptive Thresholding**: Dynamic threshold optimization for accuracy
 
-### 📊 Analytics Dashboard
+### 📊 Model Architecture
 
-- **Performance Metrics**: Accuracy, precision, recall, F1 score
-- **Confusion Matrix**: Detailed prediction categorization
-- **Confidence Distribution**: Visual confidence score analysis
-- **Trend Analysis**: Historical prediction patterns
+```
+┌─────────────────────────────────────────┐
+│  CNN Branch (20%)    BERT Branch (80%)  │
+│                                          │
+│  Inception CNN       Transformer        │
+│  (26×7) → (26×80)    Token + Segment +  │
+│                      Position Embeddings│
+│                      → (26×80)          │
+│                                          │
+│  BiGRU (20+20)       BiGRU (20+20)      │
+│  → (26×40)           → (26×40)          │
+│                                          │
+│  Take last           Take last          │
+│  timestep            timestep           │
+│  → (40)              → (40)             │
+│                                          │
+│  × 0.2               × 0.8              │
+└─────────────────────────────────────────┘
+                  ↓
+         Concatenate → (80)
+                  ↓
+    Dense Layers (128→64→2)
+                  ↓
+        Binary Classification
+```
 
 ### 🎨 User Experience
 
 - **Modern UI**: Clean, professional interface with Tailwind CSS
 - **Responsive Design**: Works seamlessly across all devices
-- **Interactive Visualizations**: Sequence match matrices and charts
+- **Authentication**: Secure TOTP-based authentication with Supabase
+- **Analytics Dashboard**: Comprehensive prediction metrics and visualizations
 - **Real-time Feedback**: Live validation and error handling
 
 ## 🛠️ Technology Stack
@@ -38,326 +64,460 @@ This platform combines cutting-edge AI technology with biological expertise to p
 - **Framer Motion** - Smooth animations
 - **Recharts** - Data visualization
 - **React Router** - Client-side routing
-- **Axios** - HTTP client
+- **Supabase** - Authentication and database
 
 ### Backend
 
 - **Node.js** - Runtime environment
 - **Express.js** - Web framework
-- **MongoDB** - Database
-- **Mongoose** - ODM
-- **Multer** - File upload handling
+- **Supabase** - Database and auth
+- **TOTP** - Two-factor authentication
 
-### AI/ML
+### AI/ML Stack
 
-- **TensorFlow** - Deep learning framework
+- **TensorFlow 2.15+** - Deep learning framework
 - **Python Flask** - Model serving API
-- **Vision Transformer** - Core ML architecture
+- **CRISPR-BERT** - Hybrid CNN-BERT architecture
 - **NumPy & Pandas** - Data processing
+- **scikit-learn** - Metrics and evaluation
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
-- Python (v3.8 or higher)
-- MongoDB (local or Atlas)
-- Git
+- **Node.js** (v16 or higher)
+- **Python** (v3.8 or higher)
+- **Git**
+- **Supabase Account** (for authentication)
 
 ### Installation
 
-1. **Clone the repository**
+#### 1. Clone the Repository
 
-   ```bash
-   git clone <repository-url>
-   cd crispr-prediction-platform
-   ```
+```bash
+git clone <repository-url>
+cd Crispr
+```
 
-2. **Install backend dependencies**
+#### 2. Install Backend Dependencies
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-3. **Install frontend dependencies**
+#### 3. Install Frontend Dependencies
 
-   ```bash
-   cd client
-   npm install
-   cd ..
-   ```
+```bash
+cd client
+npm install
+cd ..
+```
 
-4. **Install Python dependencies**
+#### 4. Install Python Dependencies
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
-5. **Set up environment variables**
+#### 5. Set Up Environment Variables
 
-   ```bash
-   # Create .env file in root directory
-   NODE_ENV=development
-   PORT=5000
-   FRONTEND_URL=http://localhost:3000
-   MONGODB_URI=mongodb://localhost:27017/crispr_prediction
-   MODEL_API_URL=http://localhost:5001
-   ```
+Create `.env` file in root directory:
 
-6. **Start the services**
+```bash
+NODE_ENV=development
+PORT=5000
+FRONTEND_URL=http://localhost:3000
 
-   **Terminal 1 - MongoDB** (if running locally):
+# Supabase Configuration
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-   ```bash
-   mongod
-   ```
+# Model API
+MODEL_API_URL=http://localhost:5001
+```
 
-   **Terminal 2 - Python Model API**:
+Create `.env` file in `client/` directory:
 
-   ```bash
-   python model_api.py
-   ```
+```bash
+REACT_APP_API_URL=http://localhost:5000
+REACT_APP_SUPABASE_URL=your_supabase_url
+REACT_APP_SUPABASE_ANON_KEY=your_anon_key
+```
 
-   **Terminal 3 - Backend Server**:
+#### 6. Train the CRISPR-BERT Model (First Time)
 
-   ```bash
-   npm run dev
-   ```
+```bash
+cd final
+python train_model.py
+cd ..
+```
 
-   **Terminal 4 - Frontend**:
+This will:
 
-   ```bash
-   cd client
-   npm start
-   ```
+- Load datasets from `final/datasets/`
+- Train the hybrid CNN-BERT model
+- Save the model to `final/weight/final_model.keras`
+- Generate adaptive threshold schedule
+
+#### 7. Start the Services
+
+**Terminal 1 - Python Model API**:
+
+```bash
+python model_api.py
+```
+
+**Terminal 2 - Backend Server**:
+
+```bash
+npm run dev
+```
+
+**Terminal 3 - Frontend**:
+
+```bash
+cd client
+npm start
+```
 
 ### 🌐 Access the Application
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
 - **Model API**: http://localhost:5001
+- **Health Check**: http://localhost:5001/health
 
 ## 📝 Usage
 
 ### Making Predictions
 
-1. **Text Input**:
+1. **Create Account / Login**:
 
-   - Navigate to the Predict page
-   - Enter 23-nucleotide sgRNA sequence
+   - Sign up with email
+   - Set up TOTP authentication
+   - Verify email if required
+
+2. **Single Prediction**:
+
+   - Navigate to Predict page
+   - Enter 23-nucleotide sgRNA sequence (A, T, C, G only)
    - Enter 23-nucleotide target DNA sequence
-   - Select expected result for validation
-   - Click "Predict Success"
+   - Click "Predict"
+   - View prediction class, confidence, and probabilities
 
-2. **Image Input**:
-   - Switch to image input mode
-   - Upload sequence image (JPEG, PNG, GIF, BMP)
-   - Select expected result
-   - Click "Predict Success"
+3. **Batch Prediction**:
+   - Use the API endpoint `/batch_predict`
+   - Send array of sequence pairs
+   - Receive predictions for all pairs
 
 ### Viewing Analytics
 
-1. Navigate to the Analytics page
-2. Select time range (24h, 7d, 30d, 90d)
-3. View performance metrics and charts
-4. Analyze prediction patterns and trends
+1. Navigate to Analytics page
+2. View:
+   - Overall prediction statistics
+   - Model performance metrics
+   - Confidence distributions
+   - Prediction trends over time
 
 ### Managing Results
 
-1. Navigate to the Results page
-2. Search and filter predictions
-3. Sort by date or confidence
-4. Export data as CSV
+1. Navigate to Results page
+2. View all your predictions
+3. Filter and search results
+4. Export data as needed
 
 ## 🔬 Model Information
 
-### Architecture
+### CRISPR-BERT Architecture
 
-- **Type**: Vision Transformer (ViT)
-- **Input**: 23×23 sequence match matrices
-- **Parameters**: ~135,000 trainable parameters
-- **Output**: Binary classification with confidence scores
+#### Input Encoding
+
+1. **CNN Encoding**: Sequence pairs encoded as (26, 7) matrix
+
+   - 26 positions (24 bp + [CLS] + [SEP] tokens)
+   - 7 features per position (nucleotide matching patterns)
+
+2. **BERT Encoding**: Token-based representation
+   - 28-token vocabulary (paired nucleotides + special tokens)
+   - Token IDs with position and segment embeddings
+   - Transformer layers with multi-head attention
+
+#### Model Components
+
+- **Inception CNN Branch**:
+
+  - Multi-scale convolutions (1×1, 2×2, 3×3, 5×5)
+  - Total: 80 channels (5 + 15 + 25 + 35)
+  - Captures local sequence patterns
+
+- **BERT Branch**:
+
+  - 256-dimensional embeddings
+  - 4 attention heads
+  - 2 transformer layers
+  - 1024-dimensional feed-forward networks
+  - Projects to 80 dimensions
+
+- **BiGRU Layers**:
+
+  - Separate BiGRU for each branch
+  - 20 forward + 20 backward units = 40 dimensions
+  - Bidirectional sequence context
+
+- **Fusion & Classification**:
+  - Weighted combination (CNN: 20%, BERT: 80%)
+  - Dense layers (80 → 128 → 64 → 2)
+  - Dropout (0.35) for regularization
+  - Binary classification output
+
+### Training Configuration
+
+| Parameter       | Value                           | Description                      |
+| --------------- | ------------------------------- | -------------------------------- |
+| Learning Rate   | 1e-4                            | Adam optimizer                   |
+| Batch Size      | 256                             | Large batch for stable gradients |
+| Epochs          | 30                              | With early stopping (patience=5) |
+| Loss Function   | Sparse Categorical Crossentropy | Binary classification            |
+| Class Weighting | Auto                            | Handles imbalanced datasets      |
+| Dropout Rate    | 0.35                            | Regularization                   |
 
 ### Performance Metrics
 
-- **Accuracy**: 68.5%
-- **F1 Score**: 68.9%
-- **Processing Time**: <200ms average
-- **Confidence Range**: 58-68% (due to limited training data)
+The model reports:
 
-### Prediction Categories
-
-- **True Positive**: Correctly predicted successful editing
-- **True Negative**: Correctly predicted no editing
-- **False Positive**: Incorrectly predicted successful editing
-- **False Negative**: Incorrectly predicted no editing
+- **AUROC** - Overall discrimination ability
+- **PRAUC** - Precision-Recall AUC (handles class imbalance)
+- **F1 Score** - Harmonic mean of precision and recall
+- **MCC** - Matthews Correlation Coefficient
+- **Accuracy** - Overall correctness
 
 ## 📊 API Reference
 
-### Backend Endpoints
-
-#### Predictions
-
-```
-POST /api/predictions/text
-POST /api/predictions/image
-GET  /api/predictions/recent
-GET  /api/predictions/:id
-```
-
-#### Analytics
-
-```
-GET /api/analytics/summary
-GET /api/analytics/performance
-GET /api/analytics/categories
-GET /api/analytics/trends
-```
-
-#### Sequences
-
-```
-GET /api/sequences/samples
-POST /api/sequences/validate
-GET /api/sequences/random
-```
-
 ### Model API Endpoints
 
+#### Health Check
+
+```http
+GET /health
 ```
-GET  /health
+
+Response:
+
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "timestamp": "2025-10-15T...",
+  "threshold": 0.55
+}
+```
+
+#### Single Prediction
+
+```http
 POST /predict
-GET  /model/info
-POST /model/retrain
+Content-Type: application/json
+
+{
+  "sgRNA": "GGTGAGTGAGTGTGTGCGTGTGG",
+  "DNA": "TGTGAGTGTGTGTGTGTGTGTGT"
+}
 ```
 
-## 🔧 Configuration
+Response:
 
-### Environment Variables
+```json
+{
+  "prediction": 1,
+  "confidence": 0.876,
+  "probabilities": {
+    "class_0": 0.124,
+    "class_1": 0.876
+  },
+  "threshold_used": 0.55,
+  "sgRNA": "GGTGAGTGAGTGTGTGCGTGTGG",
+  "DNA": "TGTGAGTGTGTGTGTGTGTGTGT",
+  "timestamp": "2025-10-15T..."
+}
+```
 
-```bash
-# Server
-NODE_ENV=development|production
-PORT=5000
-FRONTEND_URL=http://localhost:3000
+#### Batch Prediction
 
-# Database
-MONGODB_URI=
+```http
+POST /batch_predict
+Content-Type: application/json
 
-# Model API
-MODEL_API_URL=http://localhost:5001
+{
+  "sequences": [
+    {"sgRNA": "...", "DNA": "..."},
+    {"sgRNA": "...", "DNA": "..."}
+  ]
+}
+```
 
-# Security
-JWT_SECRET=your_jwt_secret
+#### Model Information
 
-# Upload
-MAX_FILE_SIZE=5242880
-UPLOAD_DIR=uploads
+```http
+GET /model/info
+```
 
-# Rate Limiting
-RATE_LIMIT_WINDOW=900000
-RATE_LIMIT_MAX=100
+Response:
+
+```json
+{
+  "model_loaded": true,
+  "model_type": "CRISPR-BERT (Hybrid CNN-BERT)",
+  "architecture": {
+    "cnn_branch": "Inception CNN (multi-scale convolutions)",
+    "bert_branch": "Transformer with multi-head attention",
+    "bigru_layers": "Bidirectional GRU (20+20 units)",
+    "weights": "CNN: 20%, BERT: 80%"
+  },
+  "input_format": {
+    "sgRNA_length": 23,
+    "DNA_length": 23
+  }
+}
+```
+
+### Backend API Endpoints
+
+See `routes/` directory for full backend API:
+
+- `/api/auth` - Authentication endpoints
+- `/api/predictions` - Prediction management
+- `/api/analytics` - Analytics and statistics
+
+## 🔧 Project Structure
+
+```
+Crispr/
+├── client/                  # React frontend
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   ├── pages/           # Page components
+│   │   └── utils/           # Utility functions
+│   └── public/              # Static assets
+│
+├── final/                   # CRISPR-BERT model files
+│   ├── datasets/            # Training datasets
+│   ├── weight/              # Trained model weights
+│   ├── bert_model.py        # BERT implementation
+│   ├── cnn_model.py         # CNN implementation
+│   ├── crispr_bert.py       # Combined model
+│   ├── sequence_encoder.py  # Sequence encoding
+│   ├── data_loader.py       # Dataset loading
+│   ├── train_model.py       # Training script
+│   └── run_model.py         # Inference script
+│
+├── routes/                  # Express routes
+│   ├── auth.js              # Authentication
+│   ├── predictions.js       # Predictions
+│   └── analytics.js         # Analytics
+│
+├── utils/                   # Backend utilities
+│   ├── supabaseServer.js    # Supabase server client
+│   └── totpService.js       # TOTP authentication
+│
+├── middleware/              # Express middleware
+│   └── auth.js              # Auth middleware
+│
+├── models/                  # Data models
+│   ├── User.js
+│   └── Prediction.js
+│
+├── model_api.py             # Flask API for predictions
+├── server.js                # Express server
+├── requirements.txt         # Python dependencies
+└── package.json             # Node dependencies
 ```
 
 ## 🐳 Docker Deployment
 
-### Build and Run
+### Using Docker Compose (Coming Soon)
 
 ```bash
-# Build the application
-docker build -t crispr-prediction .
-
-# Run with docker-compose
 docker-compose up -d
-```
-
-### Production Configuration
-
-```yaml
-version: "3.8"
-services:
-  app:
-    build: .
-    ports:
-      - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/crispr_prediction
-
-  mongo:
-    image: mongo:latest
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-
-volumes:
-  mongodb_data:
 ```
 
 ## 🧪 Testing
 
-### Run Tests
+### Test Model Inference
 
 ```bash
-# Backend tests
-npm test
-
-# Frontend tests
-cd client
-npm test
+cd final
+python run_model.py
 ```
 
-### Sample Data
+### Test API
 
-The application includes sample CRISPR sequences for testing:
+```bash
+curl -X POST http://localhost:5001/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sgRNA": "GGTGAGTGAGTGTGTGCGTGTGG",
+    "DNA": "TGTGAGTGTGTGTGTGTGTGTGT"
+  }'
+```
 
-- Perfect match examples
-- PAM mismatch cases
-- Real experimental data
+## 📚 Documentation
 
-## 🚨 Known Limitations
-
-1. **Training Data**: Limited to 200 sequence pairs
-2. **Confidence Scores**: Range of 58-68% due to dataset size
-3. **Image Processing**: Basic implementation, needs enhancement
-4. **Biological Complexity**: Simplified model of CRISPR mechanisms
+- **Model Documentation**: See `final/README.md`
+- **TOTP Setup**: See `TOTP_SETUP_GUIDE.md`
+- **Supabase Setup**: See `SUPABASE_SETUP.md`
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
 ## 🔬 Scientific Background
 
 ### CRISPR-Cas9 System
 
-- **Guide RNA (sgRNA)**: 20-nucleotide sequence that guides Cas9 to target
-- **PAM Sequence**: NGG motif required for Cas9 cutting
+- **Guide RNA (sgRNA)**: 23-nucleotide sequence that guides Cas9 to target
 - **Target DNA**: Genomic sequence to be edited
-- **Success Factors**: Sequence complementarity, PAM presence, chromatin accessibility
+- **Off-Target Effects**: Unintended edits at similar sequences
+- **Success Factors**: Sequence complementarity, mismatches, position effects
 
-### Prediction Approach
+### CRISPR-BERT Approach
 
-- **Match Matrix**: Compares each sgRNA base against all DNA bases
-- **Pattern Recognition**: ViT identifies compatibility patterns
-- **Confidence Scoring**: Probabilistic output with uncertainty quantification
+- **Hybrid Architecture**: Combines local (CNN) and global (BERT) features
+- **Multi-scale Analysis**: Captures patterns at different sequence lengths
+- **Attention Mechanism**: Learns which positions are most important
+- **Adaptive Thresholding**: Optimizes decision boundary for each dataset
+
+### Key Advantages
+
+1. **Better than Single Models**: Outperforms CNN-only or BERT-only approaches
+2. **Interpretable**: Attention weights show important sequence regions
+3. **Transferable**: Can be fine-tuned on new datasets
+4. **Efficient**: Fast inference suitable for production use
+
+## 🙏 Acknowledgments
+
+- CRISPR-BERT architecture inspired by state-of-the-art research
+- Built on TensorFlow and Flask frameworks
+- UI powered by React and Tailwind CSS
 
 ## 📞 Support
 
-For questions, issues, or contributions:
+For questions or issues:
 
 - Open an issue on GitHub
-- Contact the development team
 - Check the documentation
+- Review the examples in `final/`
 
 ---
 
-Built with ❤️ for the scientific community
+**Built with ❤️ for the scientific community**
+
+_Advancing CRISPR technology through AI-powered predictions_

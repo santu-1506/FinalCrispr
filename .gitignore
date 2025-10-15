@@ -97,3 +97,9 @@ Thumbs.db
 *TROUBLESHOOTING*.md
 !README.md
 !FIREBASE_SETUP_COMPLETE.md
+/use_saved_model.py
+/simple_model_save.py
+/generate_crispr_data.py
+crispr_encoders.py
+simple_api.py
+*.json

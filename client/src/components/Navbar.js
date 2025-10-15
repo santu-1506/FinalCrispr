@@ -8,7 +8,8 @@ import {
   DocumentTextIcon,
   HomeIcon,
   UserIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  CogIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { jwtDecode } from 'jwt-decode';
@@ -25,6 +26,7 @@ const Navbar = () => {
     { name: 'Home', href: '/', icon: HomeIcon },
     { name: 'Predict', href: '/predict', icon: BeakerIcon },
     { name: 'Results', href: '/results', icon: DocumentTextIcon },
+    { name: 'Settings', href: '/settings', icon: CogIcon },
   ];
 
   const isActive = (path) => location.pathname === path;

@@ -11,6 +11,7 @@ import {
   ArrowRightIcon,
   ChevronRightIcon,
   CheckCircleIcon,
+  ShieldCheckIcon,
 
 
 
@@ -76,21 +77,23 @@ import { toast } from 'react-hot-toast';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
-import FirebaseMobileLogin from '../components/FirebaseMobileLogin';
+import TOTPLogin from '../components/TOTPLogin';
 
 
 // API base URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Auth = () => {
-  const [authMode, setAuthMode] = useState('email'); // 'email' or 'mobile'
+  const [authMode, setAuthMode] = useState('unified'); // 'unified', 'email', or 'totp'
   const [isLogin, setIsLogin] = useState(true); // Default to signup page as per image
   const [formData, setFormData] = useState({
+    emailOrPhone: '',
     email: '',
     password: '',
     confirmPassword: '',
     fullName: ''
   });
+  const [inputType, setInputType] = useState('email'); // 'email' or 'phone'
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -115,7 +118,7 @@ const Auth = () => {
     
     if (token && user) {
       try {
-        const userData = JSON.parse(user);
+        // const userData = JSON.parse(user); // eslint-disable-line no-unused-vars
         // Verify token is still valid by checking expiration
         const tokenPayload = jwtDecode(token);
         if (tokenPayload.exp * 1000 > Date.now()) {
@@ -135,9 +138,35 @@ const Auth = () => {
     }
   }, [navigate, location]);
   
+  // Function to detect if input is email or phone number
+  const detectInputType = (value) => {
+    // Remove all spaces and special characters for phone number detection
+    const cleanValue = value.replace(/[\s\-()]/g, ''); // eslint-disable-line no-useless-escape
+    
+    // Check if it's a phone number (starts with + or contains only digits after removing non-numeric chars)
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    const isPhone = phoneRegex.test(cleanValue) || (cleanValue.length >= 6 && /^\d+$/.test(cleanValue));
+    
+    // Check if it's an email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isEmail = emailRegex.test(value);
+    
+    if (isEmail) return 'email';
+    if (isPhone) return 'phone';
+    
+    // Default behavior: if it contains @, treat as email, otherwise as phone
+    return value.includes('@') ? 'email' : 'phone';
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Auto-detect input type for unified input
+    if (name === 'emailOrPhone') {
+      const detectedType = detectInputType(value);
+      setInputType(detectedType);
+    }
     
     // Real-time password validation
     if (name === 'password' || name === 'confirmPassword') {
@@ -202,6 +231,18 @@ const Auth = () => {
         toast.error('Account temporarily locked due to too many failed attempts. Please try again later.');
       } else if (error.response?.data?.code === 'INVALID_CREDENTIALS') {
         toast.error('Invalid email or password. Please try again.');
+      } else if (error.response?.data?.code === 'USE_TOTP_AUTH') {
+        // User tried to login with email but account has TOTP enabled
+        const { email } = error.response.data.data;
+        toast.info('This account has two-factor authentication enabled. Redirecting to TOTP login...');
+        
+        // Switch to TOTP auth mode and pre-fill the email
+        setAuthMode('totp');
+        setFormData(prev => ({ 
+          ...prev, 
+          email: email || '',
+          password: ''
+        }));
       } else {
         toast.error(error.response?.data?.message || 'Login failed. Please try again.');
       }
@@ -260,10 +301,21 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      if (isLogin) {
-        await handleLogin(formData.email, formData.password);
+      if (authMode === 'unified') {
+        // Always use email/password authentication for unified mode
+        // Phone numbers will be treated just like email addresses
+        if (isLogin) {
+          await handleLogin(formData.emailOrPhone, formData.password);
+        } else {
+          await handleSignup(formData.fullName, formData.emailOrPhone, formData.password, formData.confirmPassword);
+        }
       } else {
-        await handleSignup(formData.fullName, formData.email, formData.password, formData.confirmPassword);
+        // Traditional email authentication
+        if (isLogin) {
+          await handleLogin(formData.email, formData.password);
+        } else {
+          await handleSignup(formData.fullName, formData.email, formData.password, formData.confirmPassword);
+        }
       }
     } catch (error) {
       console.error('Form submission error:', error);
@@ -346,17 +398,24 @@ const Auth = () => {
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="w-full max-w-md relative z-10"
         >
-          {/* Render Mobile Login or Email Auth based on mode */}
+          {/* Render different auth modes based on selection */}
           <AnimatePresence mode="wait">
-            {authMode === 'mobile' ? (
+            {authMode === 'totp' ? (
               <motion.div
-                key="mobile-login"
+                key="totp-login"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <FirebaseMobileLogin onBack={() => setAuthMode('email')} />
+                <TOTPLogin 
+                  onBack={() => setAuthMode('unified')} 
+                  prefillData={{
+                    fullName: formData.fullName || '',
+                    email: formData.email || formData.emailOrPhone || '',
+                    password: formData.password || ''
+                  }}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -412,15 +471,27 @@ const Auth = () => {
                         required
                       />
                     )}
-                    <InputField 
-                      name="email" 
-                      type="email" 
-                      placeholder="Email Address" 
-                      icon={EnvelopeIcon}
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      required
-                    />
+                    <div className="relative">
+                      <InputField 
+                        name="emailOrPhone" 
+                        type={inputType === 'email' ? 'email' : 'tel'} 
+                        placeholder={inputType === 'email' ? 'Email Address' : 'Phone Number'} 
+                        icon={inputType === 'email' ? EnvelopeIcon : PhoneIcon}
+                        value={formData.emailOrPhone}
+                        onChange={handleInputChange}
+                        required
+                      />
+                      {/* Input type indicator */}
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          inputType === 'email' 
+                            ? 'bg-blue-500/20 text-blue-400' 
+                            : 'bg-green-500/20 text-green-400'
+                        }`}>
+                          {inputType === 'email' ? 'Email' : 'Phone'}
+                        </span>
+                      </div>
+                    </div>
                     <InputField 
                       name="password" 
                       type={showPassword ? 'text' : 'password'}
@@ -528,17 +599,27 @@ const Auth = () => {
                     shape="rectangular"
                     logo_alignment="center"
                     width="400"
+                    ux_mode="popup"
                   />
                   
-                  {/* Mobile Number Login Option */}
+                  {/* TOTP Authenticator App Button */}
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setAuthMode('mobile')}
+                    onClick={() => {
+                      setAuthMode('totp');
+                      // Transfer email data to TOTP form if email was entered
+                      if (inputType === 'email' && formData.emailOrPhone) {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          email: formData.emailOrPhone 
+                        }));
+                      }
+                    }}
                     className="w-full flex items-center justify-center px-4 py-3 border border-gray-600 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 text-white font-medium transition-all duration-300 space-x-3"
                   >
-                    <PhoneIcon className="w-5 h-5 text-blue-400" />
-                    <span>Continue with Firebase OTP</span>
+                    <ShieldCheckIcon className="w-5 h-5 text-green-400" />
+                    <span>Authenticator App (TOTP)</span>
                   </motion.button>
                 </div>
               </div>
