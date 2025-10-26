@@ -12,64 +12,6 @@ import {
   ChevronRightIcon,
   CheckCircleIcon,
   ShieldCheckIcon,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   XCircleIcon,
   PhoneIcon
 } from '@heroicons/react/24/outline';
@@ -98,6 +40,10 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+    // --- Add these new states ---
+const [showOtpField, setShowOtpField] = useState(false);
+const [otp, setOtp] = useState("");
+
 
   const [passwordValidation, setPasswordValidation] = useState({
     minLength: false,
@@ -110,6 +56,8 @@ const Auth = () => {
   
   const navigate = useNavigate();
   const location = useLocation();
+   
+  
 
   // Check for existing authentication on mount
   useEffect(() => {
@@ -138,6 +86,87 @@ const Auth = () => {
     }
   }, [navigate, location]);
   
+  // --- New function to send OTP ---
+const sendOtp = async (phone) => {
+  const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+
+  console.log("Sending OTP to:", formattedPhone);
+
+  try {
+    const response = await axios.post(`${API_BASE_URL}/auth/send-otp`, {
+      mobileNumber: formattedPhone,
+    });
+
+    if (response.data.success) {
+      toast.success("OTP sent successfully to your phone!");
+      setShowOtpField(true);
+    } else {
+      toast.error(response.data.message || "Failed to send OTP.");
+    }
+  } catch (error) {
+    console.error("Send OTP error:", error.response?.data || error);
+    toast.error(error.response?.data?.message || "Failed to send OTP. Please try again.");
+  }
+};
+
+
+// --- New function to verify OTP ---
+// frontend/Auth.js
+
+// --- New function to verify OTP ---
+// frontend/Auth.js
+
+// --- New function to verify OTP ---
+const verifyOtp = async (phone, otp) => {
+  try {
+    const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+
+    // --- START: MODIFIED PAYLOAD ---
+    // Create the base payload
+    const payload = {
+      mobileNumber: formattedPhone,
+      code: otp,
+    };
+
+    // If this is a SIGNUP (!isLogin), add the fullName from the form
+    // This is the line that fixes your error.
+    if (!isLogin && formData.fullName) {
+      payload.fullName = formData.fullName;
+    }
+    // --- END: MODIFIED PAYLOAD ---
+
+    // Send the new payload
+    const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, payload);
+
+    // This is the correct logic from our last conversation
+    if (response.data.success && response.data.data) {
+      toast.success("OTP verified! Logging you in...");
+
+      const { token, user, refreshToken } = response.data.data;
+
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userEmail', user.email);
+      localStorage.setItem('userName', user.fullName);
+
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
+
+      setShowOtpField(false);
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
+
+    } else {
+      toast.error(response.data.message || "Invalid OTP. Please try again.");
+    }
+  } catch (error) {
+    console.error("Verify OTP error:", error.response?.data || error); // <-- This logs [Object]
+    toast.error(error.response?.data?.message || "OTP verification failed.");
+  }
+};
+
   // Function to detect if input is email or phone number
   const detectInputType = (value) => {
     // Remove all spaces and special characters for phone number detection
@@ -248,6 +277,11 @@ const Auth = () => {
       }
     }
   };
+  
+
+
+
+
 
   // API call for signup
   const handleSignup = async (fullName, email, password, confirmPassword) => {
@@ -297,33 +331,28 @@ const Auth = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
+  e.preventDefault();
+  setIsLoading(true);
 
-    try {
-      if (authMode === 'unified') {
-        // Always use email/password authentication for unified mode
-        // Phone numbers will be treated just like email addresses
-        if (isLogin) {
-          await handleLogin(formData.emailOrPhone, formData.password);
-        } else {
-          await handleSignup(formData.fullName, formData.emailOrPhone, formData.password, formData.confirmPassword);
-        }
+  try {
+    if (inputType === "phone") {
+      // Step 1: Send OTP before login
+      await sendOtp(formData.emailOrPhone);
+    } else {
+      // Step 2: Email flow (same as before)
+      if (isLogin) {
+        await handleLogin(formData.emailOrPhone, formData.password);
       } else {
-        // Traditional email authentication
-        if (isLogin) {
-          await handleLogin(formData.email, formData.password);
-        } else {
-          await handleSignup(formData.fullName, formData.email, formData.password, formData.confirmPassword);
-        }
+        await handleSignup(formData.fullName, formData.emailOrPhone, formData.password, formData.confirmPassword);
       }
-    } catch (error) {
-      console.error('Form submission error:', error);
-      toast.error('Something went wrong. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (error) {
+    toast.error("Something went wrong. Please try again.");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
   
 
 
@@ -578,6 +607,22 @@ const Auth = () => {
                     </>
                   )}
                 </motion.button>
+                // ... inside your form ...
+{showOtpField && (
+  <div className="mt-4 space-y-3">
+    {/* ... otp input ... */}
+    <motion.button
+      type="button" // <--- ADD THIS LINE
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => verifyOtp(formData.emailOrPhone, otp)}
+      className="w-full bg-green-600 hover:bg-green-500 py-3 rounded-lg text-white font-semibold"
+    >
+      Verify OTP
+    </motion.button>
+  </div>
+)}
+
               </form>
 
               <div className="mt-6">
@@ -761,7 +806,11 @@ const PasswordRequirements = ({ validation, password, confirmPassword }) => {
         </div>
       </div>
     </motion.div>
+
+    
   );
+  
+
 };
 
 export default Auth;
