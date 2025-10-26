@@ -14,6 +14,7 @@ A comprehensive web application for predicting CRISPR-Cas9 gene editing success 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - Node.js 16+
 - MongoDB
@@ -21,23 +22,27 @@ A comprehensive web application for predicting CRISPR-Cas9 gene editing success 
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone <repository-url>
 cd Crispr
 ```
 
 2. **Install Python dependencies**
+
 ```bash
 pip install -r requirements.txt
 ```
 
 3. **Install Node.js dependencies**
+
 ```bash
 npm install
 cd client && npm install
 ```
 
 4. **Start the services**
+
 ```bash
 # Start both Python API and Node.js server
 start_services.bat
@@ -53,14 +58,16 @@ start_services.bat
 ### Example Sequences
 
 **Perfect Match:**
+
 ```
 sgRNA: ATCGATCGATCGATCGATCAGGG
 DNA:   ATCGATCGATCGATCGATCAGGG
 ```
 
 **With Indel:**
+
 ```
-sgRNA: GAGTCCGAGCAGAAGAAGAAAGG  
+sgRNA: GAGTCCGAGCAGAAGAAGAAAGG
 DNA:   GAGTCCGAGCA-AAGAAGAAAGG
 ```
 
@@ -100,7 +107,7 @@ Crispr/
 This tool implements the CRISPR-BERT architecture for predicting off-target effects in CRISPR-Cas9 gene editing. The model considers:
 
 - Position-specific nucleotide sensitivity
-- PAM sequence compatibility  
+- PAM sequence compatibility
 - Seed region complementarity (positions 13-20)
 - Mismatch tolerance patterns
 - Indel impact on binding affinity
