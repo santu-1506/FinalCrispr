@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 // Components
+import ScientificAnalysis from './ScientificAnalysis';
 import Cas9Animation from './Cas9Animation';
 
 const PredictionResult = ({ prediction }) => {
@@ -106,10 +107,21 @@ const PredictionResult = ({ prediction }) => {
       {/* Cas9 Animation */}
       <div className="mt-6">
         <Cas9Animation 
-          pamCompatible={predictionData.pamMatch}
+          pamCompatible={isSuccess}
           sgRNA={sgRNA}
           DNA={DNA}
           showAnimation={true}
+        />
+      </div>
+
+      {/* Professional Scientific Analysis */}
+      <div className="mt-6">
+        <ScientificAnalysis 
+          prediction={prediction}
+          isSuccess={isSuccess}
+          sgRNA={sgRNA}
+          DNA={DNA}
+          confidence={confidence}
         />
       </div>
     </div>

@@ -37,6 +37,7 @@
 .nucleotide-T { background-color: #dbeafe; color: #2563eb; }
 .nucleotide-C { background-color: #ecfdf5; color: #059669; }
 .nucleotide-G { background-color: #fef3c7; color: #d97706; }
+.nucleotide-- { background-color: #f3f4f6; color: #6b7280; border: 1px dashed #9ca3af; }
 
 .prediction-card {
   transition: all 0.3s ease;

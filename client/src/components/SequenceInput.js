@@ -7,7 +7,8 @@ import {
 
 const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
   const formatSequence = (sequence) => {
-    return sequence.toUpperCase().replace(/[^ATCG]/g, '');
+    // Allow ATCG and - (for indels/deletions)
+    return sequence.toUpperCase().replace(/[^ATCG-]/g, '');
   };
 
   const handleSequenceChange = (field, value) => {
@@ -47,6 +48,16 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
     <div className="bg-gray-800 rounded-xl shadow-card p-6">
       <h2 className="text-lg font-semibold text-white mb-4">Sequence Input</h2>
       
+      {/* Indel Information */}
+      <div className="mb-4 bg-blue-900/30 border border-blue-700/50 rounded-lg p-3">
+        <div className="flex items-start space-x-2">
+          <InformationCircleIcon className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-blue-200">
+            <span className="font-semibold">Indel Support:</span> Use <code className="bg-blue-800/50 px-1 py-0.5 rounded text-blue-300">-</code> (dash) to represent insertions/deletions in your sequences
+          </div>
+        </div>
+      </div>
+      
       <div className="space-y-6">
         {/* sgRNA Input */}
         <div>
@@ -58,7 +69,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               type="text"
               value={sequences.sgRNA}
               onChange={(e) => handleSequenceChange('sgRNA', e.target.value)}
-              placeholder="Enter sgRNA sequence (A, T, C, G only)"
+              placeholder="Enter sgRNA sequence (A, T, C, G, - for indels)"
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm bg-gray-700 text-white placeholder-gray-400 ${
                 validationErrors.sgRNA ? 'border-red-500' : 'border-gray-600'
               }`}
@@ -107,7 +118,7 @@ const SequenceInput = ({ sequences, setSequences, validationErrors }) => {
               type="text"
               value={sequences.DNA}
               onChange={(e) => handleSequenceChange('DNA', e.target.value)}
-              placeholder="Enter target DNA sequence (A, T, C, G only)"
+              placeholder="Enter target DNA sequence (A, T, C, G, - for indels)"
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm bg-gray-700 text-white placeholder-gray-400 ${
                 validationErrors.DNA ? 'border-red-500' : 'border-gray-600'
               }`}

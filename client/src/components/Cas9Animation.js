@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
+  // pamCompatible now represents the model prediction (success/failure)
   const [animationStage, setAnimationStage] = useState('initial');
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -92,12 +93,12 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
           className="text-center mb-8"
         >
           <h3 className="text-xl font-bold text-white mb-2">
-            {pamCompatible ? 'CRISPR Cas9 Gene Editing' : 'Gene Editing Failed'}
+            {pamCompatible ? 'CRISPR Gene Editing Success' : 'Gene Editing Failed'}
           </h3>
           <p className="text-sm text-gray-300">
             {pamCompatible 
-              ? 'PAM sequence compatible - Cas9 can cut the DNA'
-              : 'PAM sequence incompatible - Cas9 cannot cut the DNA'
+              ? 'Model predicts successful on-target editing'
+              : 'Model predicts off-target or no editing'
             }
           </p>
         </motion.div>
@@ -129,7 +130,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                       </div>
                       <ArrowRightIcon className="w-4 h-4 text-gray-400" />
                       <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-2 rounded shadow-sm">
-                        <span className="text-purple-400">PAM: ...{DNA.slice(-3)}</span>
+                        <span className="text-green-400">Model: On-target ✓</span>
                       </div>
                     </div>
                     
@@ -244,10 +245,10 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                       <BeakerIcon className="w-8 h-8 text-white" />
                     </div>
                     <div className="text-2xl text-gray-400">×</div>
-                    <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-3 rounded shadow-sm">
+                      <div className="text-xs font-mono bg-gray-800 border border-gray-600 p-3 rounded shadow-sm">
                       <div className="text-blue-400 mb-1">sgRNA: {sgRNA.slice(0, 8)}...</div>
                       <div className="text-green-400 mb-1">DNA:   {DNA.slice(0, 8)}...</div>
-                      <div className="text-red-400">PAM: ...{DNA.slice(-3)} ❌</div>
+                      <div className="text-red-400">Model: Off-target ❌</div>
                     </div>
                   </div>
                 </motion.div>
@@ -259,7 +260,7 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                   className="flex items-center space-x-2 bg-red-900/30 text-red-400 border border-red-500 px-4 py-2 rounded-full"
                 >
                   <XCircleIcon className="w-5 h-5" />
-                  <span className="text-sm font-medium">Cannot Cut - PAM Mismatch</span>
+                  <span className="text-sm font-medium">Off-Target - No Editing Expected</span>
                 </motion.div>
 
                 <motion.p
@@ -268,8 +269,8 @@ const Cas9Animation = ({ pamCompatible, sgRNA, DNA, showAnimation = true }) => {
                   transition={{ delay: 1.5 }}
                   className="text-xs text-gray-400 text-center mt-4 max-w-xs"
                 >
-                  CRISPR Cas9 requires a compatible PAM sequence (NGG) for successful cutting. 
-                  The current sequence does not meet this requirement.
+                  The AI model predicts this sequence pair will not result in effective gene editing due to 
+                  mismatches or other factors that reduce on-target activity.
                 </motion.p>
               </motion.div>
             )}

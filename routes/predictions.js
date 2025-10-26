@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const Prediction = require('../models/Prediction');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
+const { analyzeSequencePair } = require('../utils/crisprAnalyzer');
 
 const router = express.Router();
 
@@ -109,12 +110,12 @@ async function callPythonModel(sgRNA, DNA) {
 router.post('/text', authenticateToken, [
   body('sgRNA')
     .isLength({ min: 23, max: 23 })
-    .matches(/^[ATCG]+$/)
-    .withMessage('sgRNA must be exactly 23 nucleotides (A, T, C, G only)'),
+    .matches(/^[ATCG-]+$/)
+    .withMessage('sgRNA must be exactly 23 nucleotides (A, T, C, G, or - for indels)'),
   body('DNA')
     .isLength({ min: 23, max: 23 })
-    .matches(/^[ATCG]+$/)
-    .withMessage('DNA must be exactly 23 nucleotides (A, T, C, G only)'),
+    .matches(/^[ATCG-]+$/)
+    .withMessage('DNA must be exactly 23 nucleotides (A, T, C, G, or - for indels)'),
   body('actualLabel')
     .isInt({ min: 0, max: 1 })
     .withMessage('Actual label must be 0 or 1')
@@ -136,6 +137,14 @@ router.post('/text', authenticateToken, [
     // Call Python model for prediction
     const modelResult = await callPythonModel(sgRNA, DNA);
     const processingTime = Date.now() - startTime;
+
+    // Perform detailed scientific analysis
+    const scientificAnalysis = analyzeSequencePair(
+      sgRNA,
+      DNA,
+      modelResult.prediction,
+      modelResult.confidence
+    );
 
     // Calculate PAM-based ground truth for categorization
     const pamPrediction = checkPAMSequence(sgRNA, DNA);
@@ -201,6 +210,16 @@ router.post('/text', authenticateToken, [
         model_info: {
           probabilities: modelResult.probabilities,
           threshold_used: modelResult.threshold_used
+        },
+        // Scientific analysis with research-based explanations
+        scientific_analysis: {
+          primary_reason: scientificAnalysis.scientificReason,
+          pam_analysis: scientificAnalysis.pamAnalysis,
+          mismatches: scientificAnalysis.mismatches,
+          indels: scientificAnalysis.indels,
+          critical_anomalies: scientificAnalysis.criticalAnomalies,
+          explanations: scientificAnalysis.explanations,
+          risk_factors: scientificAnalysis.riskFactors
         },
         // Additional debugging info
         categorization_info: {

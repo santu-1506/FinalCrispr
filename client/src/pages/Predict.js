@@ -104,6 +104,12 @@ const Predict = () => {
       actualLabel: 0
     },
     {
+      name: "Indel Example (DNA deletion)",
+      sgRNA: "GAGTCCGAGCAGAAGAAGAAAGG",
+      DNA: "GAGTCCGAGCA-AAGAAGAAAGG",
+      actualLabel: 0
+    },
+    {
       name: "Real Data Sample",
       sgRNA: "GTCACCTCCAATGACTAGGGAGG",
       DNA: "GTCTCCTCCACTGGATTGTGAGG",
@@ -121,16 +127,16 @@ const Predict = () => {
       errors.sgRNA = 'sgRNA sequence is required';
     } else if (sequences.sgRNA.length !== 23) {
       errors.sgRNA = 'sgRNA must be exactly 23 nucleotides long';
-    } else if (!/^[ATCG]+$/i.test(sequences.sgRNA)) {
-      errors.sgRNA = 'sgRNA must contain only A, T, C, G nucleotides';
+    } else if (!/^[ATCG-]+$/i.test(sequences.sgRNA)) {
+      errors.sgRNA = 'sgRNA must contain only A, T, C, G, or - (dash for indels)';
     }
 
     if (!sequences.DNA) {
       errors.DNA = 'DNA sequence is required';
     } else if (sequences.DNA.length !== 23) {
       errors.DNA = 'DNA must be exactly 23 nucleotides long';
-    } else if (!/^[ATCG]+$/i.test(sequences.DNA)) {
-      errors.DNA = 'DNA must contain only A, T, C, G nucleotides';
+    } else if (!/^[ATCG-]+$/i.test(sequences.DNA)) {
+      errors.DNA = 'DNA must contain only A, T, C, G, or - (dash for indels)';
     }
 
     setValidationErrors(errors);
@@ -332,15 +338,6 @@ const Predict = () => {
           >
           </motion.div>
 
-          {/* Processing Time */}
-          {prediction && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-green-50 rounded-xl p-6"
-            >
-            </motion.div>
-          )}
         </div>
       </div>
 

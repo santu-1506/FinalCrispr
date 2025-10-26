@@ -12,9 +12,9 @@ const predictionSchema = new mongoose.Schema({
     required: true,
     validate: {
       validator: function(v) {
-        return /^[ATCG]{23}$/.test(v);
+        return /^[ATCG-]{23}$/.test(v);
       },
-      message: 'sgRNA must be exactly 23 nucleotides (A, T, C, G only)'
+      message: 'sgRNA must be exactly 23 nucleotides (A, T, C, G, or - for indels)'
     }
   },
   DNA: {
@@ -22,9 +22,9 @@ const predictionSchema = new mongoose.Schema({
     required: true,
     validate: {
       validator: function(v) {
-        return /^[ATCG]{23}$/.test(v);
+        return /^[ATCG-]{23}$/.test(v);
       },
-      message: 'DNA must be exactly 23 nucleotides (A, T, C, G only)'
+      message: 'DNA must be exactly 23 nucleotides (A, T, C, G, or - for indels)'
     }
   },
   actualLabel: {

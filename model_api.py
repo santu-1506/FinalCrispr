@@ -45,8 +45,8 @@ threshold = 0.5
 model_loaded = False
 
 # Configuration
-MODEL_PATH = 'final/weight/final_model.keras'
-THRESHOLD_PATH = 'final/weight/threshold_schedule.json'
+MODEL_PATH = 'final1/weight/final_model.keras'
+THRESHOLD_PATH = 'final1/weight/threshold_schedule.json'
 
 
 def load_trained_model():
@@ -57,7 +57,7 @@ def load_trained_model():
         # Check if model exists
         if not os.path.exists(MODEL_PATH):
             logger.error(f"Model not found at {MODEL_PATH}")
-            logger.info("Please train the model first using train_model.py from the final/ directory")
+            logger.info("Please train the model first using train_model.py from the final1/ directory")
             return False
         
         logger.info(f"Loading CRISPR-BERT model from {MODEL_PATH}...")
@@ -185,6 +185,10 @@ def predict():
         sgrna = data['sgRNA'].upper().strip()
         dna = data['DNA'].upper().strip()
         
+        # Convert - (dash) to _ (underscore) for indel encoding
+        sgrna = sgrna.replace('-', '_')
+        dna = dna.replace('-', '_')
+        
         # Validate sequences
         if len(sgrna) != 23 or len(dna) != 23:
             return jsonify({
@@ -196,11 +200,12 @@ def predict():
                 }
             }), 400
         
-        valid_bases = set('ATCG')
+        # Allow ATCG and _ (underscore for indels/deletions)
+        valid_bases = set('ATCG_')
         if not all(base in valid_bases for base in sgrna + dna):
             return jsonify({
                 'error': 'Invalid nucleotides',
-                'message': 'Sequences must contain only A, T, C, G nucleotides'
+                'message': 'Sequences must contain only A, T, C, G, or - (for indels/deletions)'
             }), 400
         
         # Make prediction
@@ -283,6 +288,10 @@ def batch_predict():
                 sgrna = seq['sgRNA'].upper().strip()
                 dna = seq['DNA'].upper().strip()
                 
+                # Convert - (dash) to _ (underscore) for indel encoding
+                sgrna = sgrna.replace('-', '_')
+                dna = dna.replace('-', '_')
+                
                 result = predict_single(sgrna, dna)
                 result['sgRNA'] = sgrna
                 result['DNA'] = dna
@@ -357,7 +366,7 @@ def initialize_app():
         logger.info("✓ API ready to serve predictions")
     else:
         logger.warning("⚠ API started but model not loaded")
-        logger.warning("Please train the model using: python final/train_model.py")
+        logger.warning("Please train the model using: python final1/train_model.py")
     
     return success
 
