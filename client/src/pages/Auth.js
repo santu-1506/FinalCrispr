@@ -607,21 +607,55 @@ const verifyOtp = async (phone, otp) => {
                     </>
                   )}
                 </motion.button>
-                // ... inside your form ...
+                
 {showOtpField && (
-  <div className="mt-4 space-y-3">
-    {/* ... otp input ... */}
-    <motion.button
-      type="button" // <--- ADD THIS LINE
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={() => verifyOtp(formData.emailOrPhone, otp)}
-      className="w-full bg-green-600 hover:bg-green-500 py-3 rounded-lg text-white font-semibold"
-    >
-      Verify OTP
-    </motion.button>
-  </div>
-)}
+                  <motion.div 
+                    className="mt-4 space-y-4"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {/* --- THIS IS THE MISSING INPUT FIELD --- */}
+                    <InputField 
+                      name="otp" 
+                      type="text"
+                      placeholder="Enter OTP Code" 
+                      icon={ShieldCheckIcon} // Using the imported icon
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      required
+                    />
+                    
+                    {/* --- This button is updated to use isLoading --- */}
+                    <motion.button
+                      type="button" // This is correct, prevents form resubmission
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        setIsLoading(true); // Set loading before verifying
+                        verifyOtp(formData.emailOrPhone, otp)
+                          .finally(() => setIsLoading(false)); // Unset loading after
+                      }}
+                      disabled={isLoading || otp.length < 6} // Disable if loading or OTP is short
+                      className={`w-full font-semibold py-3 px-4 rounded-lg transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 ${
+                        (isLoading || otp.length < 6)
+                          ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                          : 'bg-green-600 hover:bg-green-500 shadow-green-600/20'
+                      } text-white`}
+                    >
+                      {isLoading ? (
+                        <motion.div
+                          className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        />
+                      ) : (
+                        "Verify OTP"
+                      )}
+                    </motion.button>
+                  </motion.div>
+                )}
 
               </form>
 
