@@ -1,12 +1,12 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
+const axios = require('axios');
 const User = require('../models/User');
 const { generateToken, generateRefreshToken, authenticateToken, verifyRefreshToken } = require('../middleware/auth');
 const emailService = require('../utils/emailService');
 const twilio = require('twilio');
 const admin = require('firebase-admin');
-const { isSupabaseConfigured, sendPhoneOTP, verifyPhoneOTP } = require('../utils/supabaseServer');
 const TOTPService = require('../utils/totpService');
 
 const router = express.Router();
@@ -17,7 +17,7 @@ const twilioClient = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// Initialize Firebase Admin (if not already initialized)
+// Initialize Firebase Admin (if not already initialized)  
 if (!admin.apps.length) {
   try {
     // Try to use service account key file first
@@ -245,7 +245,7 @@ router.post('/login', authLimiter, validateLogin, handleValidationErrors, async 
     }
 
     // Check if this user primarily uses phone authentication
-    if (user.authMethod === 'supabase' || user.authMethod === 'firebase' || user.mobileNumber) {
+    if (user.authMethod === 'mobile' || user.authMethod === 'firebase' || user.mobileNumber) {
       return res.status(400).json({
         success: false,
         message: 'This account is registered with phone number. Please use phone authentication instead.',
@@ -1208,67 +1208,6 @@ router.post('/check-phone', [
   }
 });
 
-// @route   POST /api/auth/supabase-send-otp
-// @desc    Send OTP via Supabase
-// @access  Public
-router.post('/supabase-send-otp', otpLimiter, [
-  body('mobileNumber')
-    .isMobilePhone()
-    .withMessage('Please provide a valid mobile number')
-], handleValidationErrors, async (req, res) => {
-  try {
-    const { mobileNumber } = req.body;
-
-    if (!isSupabaseConfigured()) {
-      return res.status(500).json({
-        success: false,
-        message: 'Phone authentication is not configured. Please contact support.',
-        code: 'SUPABASE_NOT_CONFIGURED'
-      });
-    }
-
-    console.log(`🔵 Supabase OTP request for: ${mobileNumber}`);
-
-    // Send OTP via Supabase
-    const result = await sendPhoneOTP(mobileNumber);
-    
-    if (result.success) {
-      console.log(`✅ Supabase OTP sent to: ${mobileNumber}`);
-      
-      res.json({
-        success: true,
-        message: `OTP sent to ${mobileNumber} via Supabase`,
-        data: {
-          mobileNumber,
-          expiresIn: 600, // 10 minutes
-          provider: 'Supabase'
-        }
-      });
-    } else {
-      throw new Error(result.error || 'Failed to send OTP via Supabase');
-    }
-
-  } catch (error) {
-    console.error('Supabase send OTP error:', error);
-    
-    let errorMessage = 'Failed to send OTP. Please try again.';
-    let errorCode = 'SUPABASE_OTP_SEND_ERROR';
-    
-    if (error.message?.includes('rate limit')) {
-      errorMessage = 'Too many requests. Please wait before trying again.';
-      errorCode = 'RATE_LIMIT_EXCEEDED';
-    } else if (error.message?.includes('invalid phone')) {
-      errorMessage = 'Invalid phone number format. Please check and try again.';
-      errorCode = 'INVALID_PHONE_NUMBER';
-    }
-    
-    res.status(400).json({
-      success: false,
-      message: errorMessage,
-      code: errorCode
-    });
-  }
-});
 
 // @route   POST /api/auth/phone-login
 // @desc    Login with phone number and password (for existing users)
@@ -1279,21 +1218,10 @@ router.post('/phone-login', authLimiter, [
     .withMessage('Please provide a valid mobile number'),
   body('password')
     .notEmpty()
-    .withMessage('Password is required'),
-  body('supabaseVerified')
-    .isBoolean()
-    .withMessage('Supabase verification status required')
+    .withMessage('Password is required')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const { mobileNumber, password, supabaseVerified } = req.body;
-
-    if (!supabaseVerified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone number must be verified with OTP first',
-        code: 'OTP_VERIFICATION_REQUIRED'
-      });
-    }
+    const { mobileNumber, password } = req.body;
 
     // Find user by mobile number
     const user = await User.findOne({ mobileNumber }).select('+password');
@@ -1338,7 +1266,7 @@ router.post('/phone-login', authLimiter, [
     // Update last login and mobile verification status
     user.lastLogin = new Date();
     user.isMobileVerified = true;
-    user.authMethod = 'supabase';
+    user.authMethod = 'mobile';
     await user.save();
 
     // Generate tokens
@@ -1392,21 +1320,10 @@ router.post('/phone-signup', authLimiter, [
     .withMessage('Please provide a valid mobile number'),
   body('password')
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
-  body('supabaseVerified')
-    .isBoolean()
-    .withMessage('Supabase verification status required')
+    .withMessage('Password must be at least 6 characters long')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const { fullName, mobileNumber, password, supabaseVerified } = req.body;
-
-    if (!supabaseVerified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone number must be verified with OTP first',
-        code: 'OTP_VERIFICATION_REQUIRED'
-      });
-    }
+    const { fullName, mobileNumber, password } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
@@ -1431,11 +1348,11 @@ router.post('/phone-signup', authLimiter, [
       password,
       isMobileVerified: true,
       isEmailVerified: false, // No email provided yet
-      authMethod: 'supabase',
+      authMethod: 'mobile',
       lastLogin: new Date(),
       profile: {
         phoneVerified: true,
-        verificationMethod: 'supabase'
+        verificationMethod: 'mobile'
       }
     });
 
